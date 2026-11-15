@@ -1169,6 +1169,165 @@ export function zroRowsFromSnapshot(snapshot) {
     }));
 }
 
+// -- Inco (public /v1/models catalog) ----------------------------------------
+
+/**
+ * https://api.inco.ai/v1/models is public and keyless. Prices are already US
+ * dollars per 1M tokens (docs: "Prices are US dollars per 1M tokens"), so no
+ * conversion is applied. `mode` is a service tier: `standard` is the list
+ * price and `fast` ("from 2× the speed") becomes the existing `:fast` delivery
+ * variant, hidden by default like every other tier row. Some catalogs spell
+ * the standard tier as a `:standard` id suffix (kimi-k3.1-pro) — that suffix is
+ * dropped so both spellings land on the same base id.
+ */
+export const INCO_MODELS_URL = 'https://api.inco.ai/v1/models';
+/** Minimum priced offerings required for a parse to be considered complete. */
+export const INCO_MIN_ROWS = 4;
+/**
+ * Maximum tolerated row-count drop versus the last-good snapshot. Looser than
+ * Zro's 20% because the catalog is small (ten offerings when written): one
+ * retired model plus its `:fast` twin is already 20% of it.
+ */
+export const INCO_MAX_ROW_DROP = 0.34;
+/** Reuse window for the committed last-good snapshot. */
+export const INCO_SNAPSHOT_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** `glm-5.3-flash:fast` → `glm-5.3-flash:fast`; `kimi-k3.1-pro:standard` → `kimi-k3.1-pro`. */
+export function incoRowId(id) {
+  const raw = String(id || '').trim();
+  const variant = /:(fast)$/i.test(raw) ? ':fast' : '';
+  return `${raw.replace(/:(?:standard|fast)$/i, '')}${variant}`;
+}
+
+/**
+ * Ids Inco prices an input for but publishes a $0 output for. A zero output is
+ * a missing tariff, not a free one, so those rows are skipped instead of
+ * published as free.
+ */
+export function incoZeroOutput(data) {
+  const models = Array.isArray(data?.data) ? data.data : [];
+  return models
+    .filter((m) => m && typeof m.id === 'string' && m.id.trim())
+    .filter((m) => num(m.pricing?.input) > 0 && num(m.pricing?.output) === 0)
+    .map((m) => incoRowId(m.id));
+}
+
+/**
+ * Inco https://api.inco.ai/v1/models → catalog records. Prices are already
+ * $/M. Rows Inco gives no positive output tariff are dropped (see
+ * `incoZeroOutput`); cached input maps to `cache_read`.
+ * @returns {Array<object>} catalog records with provider: 'inco'
+ */
+export function parseInco(data) {
+  const models = Array.isArray(data?.data) ? data.data : [];
+  return models.flatMap((m) => {
+    if (!m || typeof m.id !== 'string' || !m.id.trim()) return [];
+    const outMods = Array.isArray(m.modalities?.output) ? m.modalities.output : ['text'];
+    if (outMods.length !== 1 || outMods[0] !== 'text') return [];
+    const input = num(m.pricing?.input);
+    const output = num(m.pricing?.output);
+    if (!(input > 0) || !(output > 0)) return [];
+    const id = incoRowId(m.id);
+    const cached = num(m.pricing?.cached_input);
+    return [{
+      id,
+      name: m.name || m.id,
+      org: orgFromBareModelId(id),
+      provider: 'inco',
+      quantization: null,
+      discount: 0,
+      context_length: num(m.context_length),
+      input_modalities: Array.isArray(m.modalities?.input) ? m.modalities.input.filter(Boolean) : null,
+      pricing: {
+        input,
+        output,
+        cache_read: cached !== null && cached >= 0 ? cached : null,
+        cache_write: null,
+      },
+    }];
+  });
+}
+
+/** "GLM 5.3 Flash (Fast)" matches `glm-5.3-flash:fast`; "Kimi K3.1 Pro" matches `kimi-k3.1-pro:standard`. */
+export function incoNameMatchesId(name, id) {
+  const slug = String(name || '').toLowerCase()
+    .replace(/\([^)]*\)/g, '')
+    .replace(/[^a-z0-9.]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const raw = String(id || '').toLowerCase();
+  if (slug !== raw.replace(/:(?:standard|fast)$/, '')) return false;
+  return raw.endsWith(':fast') === /\(fast\)/i.test(String(name));
+}
+
+/**
+ * Fail-closed validation of an Inco snapshot: partial parses, duplicate ids,
+ * non-positive prices, a sub-floor row count, mismatched names, or a large
+ * row-count drop versus last-good all reject it.
+ */
+export function validateIncoSnapshot(snapshot, { previous = null } = {}) {
+  const models = snapshot?.models;
+  if (!Array.isArray(models)) throw new Error('inco snapshot: models must be an array');
+  if (models.length < INCO_MIN_ROWS) {
+    throw new Error(`inco snapshot: ${models.length} rows is below the ${INCO_MIN_ROWS}-row minimum floor`);
+  }
+  const seen = new Set();
+  for (const [index, m] of models.entries()) {
+    if (!m || typeof m !== 'object') throw new Error(`inco snapshot: row ${index} is not an object`);
+    const id = typeof m.id === 'string' ? m.id.trim() : '';
+    if (!id) throw new Error(`inco snapshot: row ${index} has an empty/invalid id`);
+    if (seen.has(id)) throw new Error(`inco snapshot: duplicate model id "${id}"`);
+    seen.add(id);
+    if (!Number.isFinite(m.input) || m.input <= 0) throw new Error(`inco snapshot: "${id}" has a non-positive input price`);
+    if (!Number.isFinite(m.output) || m.output <= 0) throw new Error(`inco snapshot: "${id}" has a non-positive output price`);
+    if (m.name && !incoNameMatchesId(m.name, id)) {
+      throw new Error(`inco snapshot: display name "${m.name}" does not match id "${id}"`);
+    }
+  }
+  const previousModels = previous?.models;
+  if (Array.isArray(previousModels) && previousModels.length > 0) {
+    const floor = previousModels.length * (1 - INCO_MAX_ROW_DROP);
+    if (models.length < floor) {
+      throw new Error(
+        `inco snapshot: row count dropped more than ${Math.round(INCO_MAX_ROW_DROP * 100)}% ` +
+        `(${models.length} vs ${previousModels.length} last-good)`,
+      );
+    }
+  }
+  return true;
+}
+
+/** True when a snapshot's fetched_at is within the reuse TTL of `now`. */
+export function incoSnapshotFresh(snapshot, now = Date.now()) {
+  const fetchedAt = snapshot?.fetched_at ? Date.parse(snapshot.fetched_at) : NaN;
+  if (!Number.isFinite(fetchedAt)) return false;
+  const age = now - fetchedAt;
+  return age >= 0 && age < INCO_SNAPSHOT_TTL_MS;
+}
+
+/** Snapshot rows → catalog records. Non-positive prices are dropped. */
+export function incoRowsFromSnapshot(snapshot) {
+  const models = Array.isArray(snapshot?.models) ? snapshot.models : [];
+  return models
+    .filter((m) => m && typeof m.id === 'string' && m.id.trim())
+    .filter((m) => Number.isFinite(m.input) && m.input > 0 && Number.isFinite(m.output) && m.output > 0)
+    .map((m) => ({
+      id: incoRowId(m.id),
+      name: m.name || m.id.trim(),
+      org: orgFromBareModelId(m.id),
+      provider: 'inco',
+      quantization: null,
+      discount: 0,
+      context_length: Number.isFinite(m.context_length) ? m.context_length : null,
+      input_modalities: Array.isArray(m.input_modalities) ? m.input_modalities : null,
+      pricing: {
+        input: m.input,
+        output: m.output,
+        cache_read: Number.isFinite(m.cache_read) ? m.cache_read : null,
+        cache_write: null,
+      },
+    }));
+}
+
 /** Filter out non-text models by ID pattern. */
 export const NON_TEXT_ID = /(?:^|[-/])(embed|embedding|embeddinggemma|clip|bge|tts|bark|parler|kokoro|openvoice)(?:[-/]|$)/i;
 export function isTextModel(id) {
