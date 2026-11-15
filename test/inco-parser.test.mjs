@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -211,4 +211,34 @@ test('a fetch failure with no snapshot yields no rows and a reason', async () =>
 test('the committed snapshot is readable and valid', async () => {
   const snapshot = await readIncoSnapshot(INCO_SNAPSHOT_PATH);
   assert.ok(snapshot, 'data/inco-pricing.json is committed and valid');
+});
+
+// ── registry + reviewed metadata ──────────────────────────────────────────────
+
+test('Inco is wired into main() as a keyless Tier-1 source with a snapshot fallback', async () => {
+  const src = await readFile('scripts/fetch-pricing.mjs', 'utf8');
+  assert.match(src, /import \{ getIncoCatalogRows \} from '\.\/fetch-inco\.mjs'/);
+  assert.match(src, /const inco = await getIncoCatalogRows\(\)/);
+  assert.match(src, /status: `ok \(\$\{inco\.source\}\)`/);
+  assert.match(src, /stampSource\(inco\.rows, 'direct'\)/);
+});
+
+test('the Inco metadata block carries the reviewed policy URLs and retention stance', async () => {
+  const src = await readFile('scripts/fetch-pricing.mjs', 'utf8');
+  const metadata = src.match(/  inco: \{[\s\S]*?\n  \}/)?.[0];
+  assert.ok(metadata, 'MANUAL_PROVIDER_META has an inco entry');
+  assert.match(metadata, /privacy_policy_url: 'https:\/\/inco\.ai\/legal\/privacy\/'/);
+  assert.match(metadata, /terms_of_service_url: 'https:\/\/inco\.ai\/legal\/terms\/'/);
+  assert.match(metadata, /status_page_url: null/);
+  assert.match(metadata, /headquarters: 'US'/);
+  assert.match(metadata, /retains_prompts: true/);
+  assert.match(metadata, /may_train: false/);
+  assert.match(metadata, /retention_days: 30/);
+  assert.match(metadata, /retention_note: '[^']*relayed[^']*'/);
+});
+
+test('both refresh workflows commit the Inco snapshot', async () => {
+  for (const workflow of ['.github/workflows/refresh-pricing.yml', '.github/workflows/refresh-aa.yml']) {
+    assert.match(await readFile(workflow, 'utf8'), /git add [^\n]*data\/inco-pricing\.json/);
+  }
 });
