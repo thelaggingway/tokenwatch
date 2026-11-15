@@ -9,7 +9,9 @@
  *          SambaNova, HyperCharm, Sference, Neuralwatt, Merius, Aster Labs,
  *          Arilo.id, Avian, CoralBricks (public catalog), SingularityAPI, RunInfra,
  *          LLM Gateway (differential hosts only), Alchemy Inference (docs
- *          price table; optional ALCHEMY_INFERENCE_API_KEY /v1/models narrows it)
+ *          price table; optional ALCHEMY_INFERENCE_API_KEY /v1/models narrows it),
+ *          Inco (public /v1/models catalog, daily with a committed last-good
+ *          snapshot; `:fast` ids stay delivery variants)
  *          (authoritative source for their own offerings; Singularity + RunInfra
  *          are auth-gated via SINGULARITY_API_KEY / RUNINFRA_API_KEY;
  *          LLM Gateway via LLMGATEWAY_API_KEY emits only providers TokenWatch
@@ -78,6 +80,7 @@ import { fetchAABenchmarks } from './fetch-aa.mjs';
 import { fetchArenaBenchmarks } from './fetch-arena.mjs';
 import { fetchNeuralwattEnergy } from './fetch-neuralwatt-energy.mjs';
 import { getZroCatalogRows } from './fetch-zro.mjs';
+import { getIncoCatalogRows } from './fetch-inco.mjs';
 import { resolveOpenWeightsForOfferings } from '../shared/open-weights.mjs';
 import { normalizeOpenRouterEndpointCapabilities } from '../shared/openrouter-endpoint.mjs';
 
@@ -517,6 +520,24 @@ const MANUAL_PROVIDER_META = {
     // "Zero prompt retention" is marketing-page copy, not a reviewed policy
     // verdict — leave retains_prompts and may_train unset (same stance as Zro).
     retention_days: null,
+  },
+  inco: {
+    // Inco AI, Inc. (Delaware; 1881 Page Mill Road, Palo Alto, CA — Terms § intro,
+    // Privacy §15). Both policies reviewed 2026-11-15, current versions effective
+    // 2026-10-15 (terms) and same day (privacy); inco.ai/terms and /privacy
+    // redirect to these canonical /legal/ paths. No public status page found.
+    privacy_policy_url: 'https://inco.ai/legal/privacy/',
+    terms_of_service_url: 'https://inco.ai/legal/terms/',
+    status_page_url: null,   // status.inco.ai does not resolve; no public status page
+    headquarters: 'US',
+    datacenters: null,       // Inco-served inference runs in several undisclosed regions (NA, EU, APAC; never PRC/TW/HK). Account data: US.
+    // Defaults, not the toggles: the "Store & Improve" setting is on unless the
+    // account is European (Terms §5.1A), so content IS retained by default; the
+    // "Training Setting" is off by default for every account (§5.3).
+    retains_prompts: true,   // Store & Improve on by default (except European accounts)
+    may_train: false,        // Training Setting off by default for every account (§5.3)
+    retention_days: 30,      // European accounts: content logs deleted within 30 days. Others: "as long as needed", reviewed yearly
+    retention_note: 'Content logs are kept only while the opt-out "Store & Improve" setting is on: deleted within 30 days for European accounts, otherwise kept as long as needed to improve the service (reviewed yearly) and deleted within 30 days of turning the setting off. With it off, bodies are not retained beyond the request. The three standard-tier GLM 5.3 and DeepSeek V4.1 Flash ids are relayed to Z.ai (Singapore) and DeepSeek (PRC) under their own terms; every `:fast` id and both MiniMax/Kimi ids run on Inco infrastructure.',
   },
   concentrate: {
     // concentrate.ai/privacy and /terms redirect to /auth/login (reviewed
@@ -1277,6 +1298,33 @@ async function main() {
       out.providers.push({ key: prov.key, name: prov.name, model_count: 0, status: `error: parse failed: ${err.message}` });
       console.error(`✗ ${prov.name}: ${err.message}`);
     }
+  }
+
+  // ── Inco (public catalog, Tier 1 with a committed last-good snapshot) ──
+  // Keyless https://api.inco.ai/v1/models. Prices are already $/M. The loader
+  // reuses a snapshot younger than 24h, so the 2-hourly refresh hits the live
+  // catalog once a day, and falls back to the last-good snapshot on any
+  // fetch/parse/validation failure. `:fast` ids stay delivery variants
+  // (hidden by default); `:standard` ids collapse onto the base id.
+  try {
+    const inco = await getIncoCatalogRows();
+    if (inco.rows.length) {
+      out.providers.push({
+        key: 'inco',
+        name: 'Inco',
+        model_count: inco.rows.length,
+        status: `ok (${inco.source})`,
+      });
+      stampSource(inco.rows, 'direct');
+      tieredModels.push(...inco.rows);
+      console.log(`✓ Inco: ${inco.rows.length} models (${inco.source})`);
+    } else {
+      out.providers.push({ key: 'inco', name: 'Inco', model_count: 0, status: `error: ${inco.reason || 'no rows'}` });
+      console.warn(`⚠ Inco: no rows available (${inco.reason || 'no snapshot'})`);
+    }
+  } catch (err) {
+    out.providers.push({ key: 'inco', name: 'Inco', model_count: 0, status: `error: ${err.message}` });
+    console.error(`✗ Inco: ${err.message}`);
   }
 
   // ── Zro (official public pricing page, Tier 3 with direct-precedence) ──
