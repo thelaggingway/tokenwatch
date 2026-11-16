@@ -2041,8 +2041,6 @@ export function parseAlchemy({ markdown, catalog = null } = {}) {
 
 export const SARVAM_PRICING_URL = 'https://www.sarvam.ai/api-pricing';
 export const SARVAM_MODELS_URL = 'https://api.sarvam.ai/v2/models';
-// ECB reference rates, keyless. Sarvam bills LLM tokens in INR only.
-export const SARVAM_FX_URL = 'https://api.frankfurter.dev/v1/latest?base=INR&symbols=USD';
 
 // Sarvam's catalog ids drop the separators other hosts use (glm5.3, gemma4,
 // deepseekv4.1-flash-1017); map them onto the existing canonical rows.

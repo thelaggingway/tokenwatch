@@ -13,7 +13,8 @@
  *          Inco (public /v1/models catalog, daily with a committed last-good
  *          snapshot; `:fast` ids stay delivery variants),
  *          Sarvam AI Token Factory (INR JSON-LD on the public pricing page,
- *          joined to the keyless /v2/models catalog, converted at the ECB rate)
+ *          joined to the keyless /v2/models catalog, converted at the weekly
+ *          ECB rate committed in data/fx-inr-usd.json)
  *          (authoritative source for their own offerings; Singularity + RunInfra
  *          are auth-gated via SINGULARITY_API_KEY / RUNINFRA_API_KEY;
  *          LLM Gateway via LLMGATEWAY_API_KEY emits only providers TokenWatch
@@ -58,7 +59,7 @@ import {
   parseCoralbricks, parseSingularity, parseRuninfra, parseLlmgateway, dropCoveredLlmgatewayRows,
   parseRunanywhere, parseEngy, parseOpenscale,
   parseAlchemy, ALCHEMY_MODELS_DOC_URL, ALCHEMY_MODELS_API_URL,
-  parseSarvam, SARVAM_PRICING_URL, SARVAM_MODELS_URL, SARVAM_FX_URL,
+  parseSarvam, SARVAM_PRICING_URL, SARVAM_MODELS_URL,
   parseConcentrate, reconcileConcentrate, concentrateJoin, concentrateCuratedSection,
   CONCENTRATE_MODELS_URL, CONCENTRATE_PRICE_TOLERANCE, CONCENTRATE_CURATED_SLUGS,
   parseOpenCodeGoDocs,
@@ -84,6 +85,7 @@ import { fetchArenaBenchmarks } from './fetch-arena.mjs';
 import { fetchNeuralwattEnergy } from './fetch-neuralwatt-energy.mjs';
 import { getZroCatalogRows } from './fetch-zro.mjs';
 import { getIncoCatalogRows } from './fetch-inco.mjs';
+import { getInrUsdRate, inrPricingNote } from './fetch-fx.mjs';
 import { resolveOpenWeightsForOfferings } from '../shared/open-weights.mjs';
 import { normalizeOpenRouterEndpointCapabilities } from '../shared/openrouter-endpoint.mjs';
 
@@ -229,14 +231,17 @@ const DIRECT_PROVIDERS = [
     parse: parseAlchemy,
   },
   {
-    // Pricing page + /v2/models + FX are all public; chat itself needs a key,
-    // pricing does not.
+    // Pricing page + /v2/models are public; chat itself needs a key, pricing
+    // does not. INR prices use the weekly committed rate (fetch-fx.mjs).
     key: 'sarvam',
     name: 'Sarvam AI',
     fetch: fetchSarvam,
     parse: parseSarvam,
   },
 ];
+
+// Rate used for this run's Sarvam rows; surfaced as providers_meta.sarvam.pricing_note.
+let sarvamFx = null;
 
 async function fetchSarvam() {
   const res = await fetch(SARVAM_PRICING_URL, {
@@ -245,12 +250,10 @@ async function fetchSarvam() {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${SARVAM_PRICING_URL}`);
   const html = await res.text();
-  const [catalog, fx] = await Promise.all([fetchJson(SARVAM_MODELS_URL), fetchJson(SARVAM_FX_URL)]);
-  const usdPerInr = Number(fx?.rates?.USD);
-  // Guard against a garbled rate silently scaling every Sarvam price.
-  if (!(usdPerInr > 0.005 && usdPerInr < 0.05)) throw new Error(`implausible INR→USD rate ${fx?.rates?.USD}`);
-  console.log(`  Sarvam AI: INR→USD ${usdPerInr} (ECB ${fx?.date})`);
-  return { html, catalog, usdPerInr };
+  const [catalog, fx] = await Promise.all([fetchJson(SARVAM_MODELS_URL), getInrUsdRate()]);
+  console.log(`  Sarvam AI: INR→USD ${fx.rate} (ECB ${fx.rate_date}, ${fx.source})`);
+  sarvamFx = fx;
+  return { html, catalog, usdPerInr: fx.rate };
 }
 
 async function fetchAlchemy() {
@@ -1590,6 +1593,7 @@ async function main() {
   if (zdrCount > 0) console.log(`  ZDR-tagged ${zdrCount} of ${out.models.length} models from endpoint-level data`);
   // ── Provider metadata ──
   out.providers_meta = await fetchProviderMeta();
+  if (sarvamFx && out.providers_meta?.sarvam) out.providers_meta.sarvam.pricing_note = inrPricingNote(sarvamFx);
   // Provider-level ZDR fallback: if endpoint-level didn't tag a model,
   // check if its provider's dataPolicy says retains_prompts=false.
   let provZdrCount = 0;
