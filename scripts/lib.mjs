@@ -1465,6 +1465,8 @@ export const PROVIDER_NAME_MAP = {
   'open scale': 'openscale',
   'alchemy': 'alchemy',
   'alchemy inference': 'alchemy',
+  'sarvam': 'sarvam',
+  'sarvam ai': 'sarvam',
   'coralbricks': 'coralbricks',
   'coral bricks': 'coralbricks',
   'nanogpt': 'nanogpt',
@@ -2029,6 +2031,100 @@ export function parseAlchemy({ markdown, catalog = null } = {}) {
         input,
         output,
         cache_read: price(c[iCached]),
+        cache_write: null, // not sold
+      },
+    }];
+  });
+}
+
+// ── Sarvam AI (Token Factory) ────────────────────────────────────────────────
+
+export const SARVAM_PRICING_URL = 'https://www.sarvam.ai/api-pricing';
+export const SARVAM_MODELS_URL = 'https://api.sarvam.ai/v2/models';
+
+// Sarvam's catalog ids drop the separators other hosts use (glm5.3, gemma4,
+// deepseekv4.1-flash-1017); map them onto the existing canonical rows.
+const SARVAM_MODEL_IDS = {
+  'sarvam-105b': { id: 'sarvam-105b', org: 'sarvam' },
+  'sarvam-105b-conversations': { id: 'sarvam-105b-conversations', org: 'sarvam' },
+  'glm5.3': { id: 'glm-5.3', org: 'z-ai' },
+  'glm5.3-flash': { id: 'glm-5.3-flash', org: 'z-ai' },
+  'gemma4': { id: 'gemma-4-31b-it', org: 'google' },
+  'deepseekv4.1-flash-1017': { id: 'deepseek-v4.1-flash-1017', org: 'deepseek' },
+};
+
+/**
+ * Sarvam AI Token Factory. LLM prices are published only on
+ * SARVAM_PRICING_URL, as schema.org JSON-LD Offers ("LLM, <name>") in INR per
+ * 1M input / cached input / output tokens. The public GET /v2/models catalog
+ * (no key) has ids, display names and context but no prices; the pricing page
+ * names omit the size the catalog carries ("Gemma 4" vs "Gemma 4 31B"), so a
+ * trailing size token is tolerated when joining. Prices are converted to USD
+ * with `usdPerInr`. Provisioned-throughput models are not pay-as-you-go and
+ * are skipped.
+ *
+ * Throws when the JSON-LD LLM offers or the catalog are missing so a page
+ * redesign surfaces as a parse failure, not an outage.
+ */
+export function parseSarvam({ html, catalog, usdPerInr } = {}) {
+  if (!(usdPerInr > 0)) throw new Error('Sarvam: missing INR→USD rate');
+  const apiModels = Array.isArray(catalog?.data) ? catalog.data : null;
+  if (!apiModels) throw new Error('Sarvam: /v2/models catalog missing');
+
+  const offers = [];
+  const walk = (n) => {
+    if (Array.isArray(n)) return n.forEach(walk);
+    if (!n || typeof n !== 'object') return;
+    const service = n.itemOffered?.name;
+    if (n['@type'] === 'Offer' && typeof service === 'string' && /^LLM,\s*/.test(service)) {
+      offers.push({ name: service.replace(/^LLM,\s*/, '').trim(), specs: n.priceSpecification });
+    }
+    Object.values(n).forEach(walk);
+  };
+  const scripts = String(html || '').matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/g);
+  for (const [, body] of scripts) {
+    try { walk(JSON.parse(body)); } catch { /* unrelated or malformed block */ }
+  }
+  if (!offers.length) throw new Error('Sarvam pricing: no "LLM" JSON-LD offers found');
+
+  const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9.]+/g, ' ').trim();
+  const findModel = (name) => {
+    const n = norm(name);
+    return apiModels.find((m) => norm(m.display_name) === n)
+      || apiModels.find((m) => {
+        const d = norm(m.display_name);
+        return d.startsWith(`${n} `) && /^\d+(\.\d+)?b$/.test(d.slice(n.length + 1));
+      });
+  };
+  const usd = (specs, label) => {
+    const s = (Array.isArray(specs) ? specs : []).find((p) => norm(p?.name) === label);
+    if (!s) return null;
+    if (s.priceCurrency !== 'INR' || num(s.referenceQuantity?.value) !== 1_000_000) {
+      throw new Error(`Sarvam pricing: unexpected unit for "${label}" (${s.priceCurrency}/${s.referenceQuantity?.value})`);
+    }
+    const v = num(s.price);
+    return v === null ? null : cleanPerM(v * usdPerInr);
+  };
+
+  return offers.flatMap(({ name, specs }) => {
+    const api = findModel(name);
+    if (!api || api.type !== 'chat' || api.access === 'provisioned') return [];
+    const mapped = SARVAM_MODEL_IDS[api.id];
+    const id = mapped?.id ?? resolveCatalogId(api.id);
+    return [{
+      id,
+      name: api.display_name || name,
+      org: mapped?.org ?? (api.owned_by === 'sarvam' ? 'sarvam' : orgForOffering(api.id, id)),
+      provider: 'sarvam',
+      quantization: null,
+      discount: 0,
+      context_length: num(api.context_length),
+      max_completion_tokens: num(api.max_output_tokens),
+      input_modalities: api.supports_image_input ? ['text', 'image'] : ['text'],
+      pricing: {
+        input: usd(specs, 'input tokens'),
+        output: usd(specs, 'output tokens'),
+        cache_read: usd(specs, 'cached input tokens'),
         cache_write: null, // not sold
       },
     }];

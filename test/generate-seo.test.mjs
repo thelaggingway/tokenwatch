@@ -617,6 +617,11 @@ test('provider snippet: concrete title and description computed from the rendere
   assert.doesNotMatch(html, /Retention:/);
   const noted = renderProviderPage({ ...provider, meta: { retains_prompts: true, retention_note: 'Inputs 7 days; outputs 30 days.' } }, { text: '2026-10-04' });
   assert.match(noted, /Retention: Inputs 7 days; outputs 30 days\./);
+
+  // A currency-conversion note (e.g. Sarvam's INR billing) gets its own paragraph.
+  assert.doesNotMatch(html, /data-pricing-note/);
+  const converted = renderProviderPage({ ...provider, meta: { pricing_note: 'Billed in INR. USD prices are converted at ₹1 = $0.0106.' } }, { text: '2026-10-04' });
+  assert.match(converted, /<p data-pricing-note>Billed in INR\. USD prices are converted at ₹1 = \$0\.0106\.<\/p>/);
 });
 
 test('model snippet: provider count, cheapest input, month, and readable model name', () => {

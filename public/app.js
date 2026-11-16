@@ -2347,6 +2347,9 @@ function providerMetaHtml(providerKey) {
   if (meta.status_page_url) {
     html += `<a href="${esc(meta.status_page_url)}" target="_blank" rel="noopener" class="meta-link" title="Status Page">📊</a>`;
   }
+  if (meta.pricing_note) {
+    html += `<span class="meta-link" title="${esc(meta.pricing_note)}" aria-label="${esc(meta.pricing_note)}">💱</span>`;
+  }
   return html;
 }
 
