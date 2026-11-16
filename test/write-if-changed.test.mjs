@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { maybeWriteJson } from '../scripts/lib.mjs';
 
-test('maybeWriteJson writes when data changed and skips when only generated_at changed', async () => {
+test('maybeWriteJson writes when data changed and skips when only generated_at changed', async t => {
+  // The skip path logs to stdout; stray stdout in a test child can corrupt the
+  // runner's serialized result stream ("Unable to deserialize cloned data").
+  t.mock.method(console, 'log', () => {});
   const dir = await mkdtemp(join(tmpdir(), 'tw-write-'));
   const path = join(dir, 'out.json');
   try {
