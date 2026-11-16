@@ -11,7 +11,9 @@
  *          LLM Gateway (differential hosts only), Alchemy Inference (docs
  *          price table; optional ALCHEMY_INFERENCE_API_KEY /v1/models narrows it),
  *          Inco (public /v1/models catalog, daily with a committed last-good
- *          snapshot; `:fast` ids stay delivery variants)
+ *          snapshot; `:fast` ids stay delivery variants),
+ *          Sarvam AI Token Factory (INR JSON-LD on the public pricing page,
+ *          joined to the keyless /v2/models catalog, converted at the ECB rate)
  *          (authoritative source for their own offerings; Singularity + RunInfra
  *          are auth-gated via SINGULARITY_API_KEY / RUNINFRA_API_KEY;
  *          LLM Gateway via LLMGATEWAY_API_KEY emits only providers TokenWatch
@@ -56,6 +58,7 @@ import {
   parseCoralbricks, parseSingularity, parseRuninfra, parseLlmgateway, dropCoveredLlmgatewayRows,
   parseRunanywhere, parseEngy, parseOpenscale,
   parseAlchemy, ALCHEMY_MODELS_DOC_URL, ALCHEMY_MODELS_API_URL,
+  parseSarvam, SARVAM_PRICING_URL, SARVAM_MODELS_URL, SARVAM_FX_URL,
   parseConcentrate, reconcileConcentrate, concentrateJoin, concentrateCuratedSection,
   CONCENTRATE_MODELS_URL, CONCENTRATE_PRICE_TOLERANCE, CONCENTRATE_CURATED_SLUGS,
   parseOpenCodeGoDocs,
@@ -225,7 +228,30 @@ const DIRECT_PROVIDERS = [
     fetch: fetchAlchemy,
     parse: parseAlchemy,
   },
+  {
+    // Pricing page + /v2/models + FX are all public; chat itself needs a key,
+    // pricing does not.
+    key: 'sarvam',
+    name: 'Sarvam AI',
+    fetch: fetchSarvam,
+    parse: parseSarvam,
+  },
 ];
+
+async function fetchSarvam() {
+  const res = await fetch(SARVAM_PRICING_URL, {
+    headers: { Accept: 'text/html', 'User-Agent': 'Mozilla/5.0 (compatible; TokenWatch/1.0)' },
+    signal: AbortSignal.timeout(45_000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${SARVAM_PRICING_URL}`);
+  const html = await res.text();
+  const [catalog, fx] = await Promise.all([fetchJson(SARVAM_MODELS_URL), fetchJson(SARVAM_FX_URL)]);
+  const usdPerInr = Number(fx?.rates?.USD);
+  // Guard against a garbled rate silently scaling every Sarvam price.
+  if (!(usdPerInr > 0.005 && usdPerInr < 0.05)) throw new Error(`implausible INR→USD rate ${fx?.rates?.USD}`);
+  console.log(`  Sarvam AI: INR→USD ${usdPerInr} (ECB ${fx?.date})`);
+  return { html, catalog, usdPerInr };
+}
 
 async function fetchAlchemy() {
   const res = await fetch(ALCHEMY_MODELS_DOC_URL, {
@@ -489,6 +515,15 @@ const MANUAL_PROVIDER_META = {
     terms_of_service_url: 'https://www.alchemy.com/policies/terms',
     status_page_url: null,
     headquarters: null,
+    datacenters: null,
+  },
+  sarvam: {
+    // Footer links on https://www.sarvam.ai/api-pricing (reviewed 2026-11-16).
+    // Retention/training terms not reviewed, so ZDR fields stay unknown.
+    privacy_policy_url: 'https://www.sarvam.ai/privacy-policy',
+    terms_of_service_url: 'https://www.sarvam.ai/terms-of-service',
+    status_page_url: 'https://status.sarvam.ai/',
+    headquarters: 'IN',
     datacenters: null,
   },
   llmgateway: {
