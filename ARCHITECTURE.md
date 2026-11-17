@@ -32,6 +32,7 @@ flowchart TD
       T1L["Aster Labs /v1/models"]
       T1M["SingularityAPI /v1/models (auth)"]
       T1O["Inco /v1/models (public, last-good snapshot)"]
+      T1P["JarvisLabs Token Factory page (public, last-good snapshot)"]
       T1N["RunInfra /v1/models (auth)"]
     end
         subgraph T2T["Tier 2 — OpenRouter de-aggregated"]

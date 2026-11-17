@@ -12,6 +12,8 @@
  *          price table; optional ALCHEMY_INFERENCE_API_KEY /v1/models narrows it),
  *          Inco (public /v1/models catalog, daily with a committed last-good
  *          snapshot; `:fast` ids stay delivery variants),
+ *          JarvisLabs Token Factory (public product page, no keyless catalog;
+ *          daily with a committed last-good snapshot),
  *          Sarvam AI Token Factory (INR JSON-LD on the public pricing page,
  *          joined to the keyless /v2/models catalog, converted at the weekly
  *          ECB rate committed in data/fx-inr-usd.json)
@@ -85,6 +87,7 @@ import { fetchArenaBenchmarks } from './fetch-arena.mjs';
 import { fetchNeuralwattEnergy } from './fetch-neuralwatt-energy.mjs';
 import { getZroCatalogRows } from './fetch-zro.mjs';
 import { getIncoCatalogRows } from './fetch-inco.mjs';
+import { getJarvislabsCatalogRows } from './fetch-jarvislabs.mjs';
 import { getInrUsdRate, inrPricingNote } from './fetch-fx.mjs';
 import { resolveOpenWeightsForOfferings } from '../shared/open-weights.mjs';
 import { normalizeOpenRouterEndpointCapabilities } from '../shared/openrouter-endpoint.mjs';
@@ -594,6 +597,37 @@ const MANUAL_PROVIDER_META = {
     may_train: false,        // Training Setting off by default for every account (§5.3)
     retention_days: 30,      // European accounts: content logs deleted within 30 days. Others: "as long as needed", reviewed yearly
     retention_note: 'Content logs are kept only while the opt-out "Store & Improve" setting is on: deleted within 30 days for European accounts, otherwise kept as long as needed to improve the service (reviewed yearly) and deleted within 30 days of turning the setting off. With it off, bodies are not retained beyond the request. The three standard-tier GLM 5.3 and DeepSeek V4.1 Flash ids are relayed to Z.ai (Singapore) and DeepSeek (PRC) under their own terms; every `:fast` id and both MiniMax/Kimi ids run on Inco infrastructure.',
+  },
+  jarvislabs: {
+    // Jarvislabs, New Delhi, India — corporate office Uppal's Genesis A-32,
+    // Mohan Cooperative Industrial Estate, Badarpur, and registered office the
+    // Awfis suite on Mathura Road, both New Delhi 110044 (contactus page,
+    // reviewed 2026-11-18). Token Factory inference runs "on Jarvislabs GPUs in
+    // our India region".
+    //
+    // The only legal page is the combined Terms of Service
+    // (https://jarvislabs.ai/termsandservice, undated, reviewed 2026-11-18).
+    // Its "Privacy Policy, Information Collection, Storage and Use Policy"
+    // section IS the privacy policy: jarvislabs.ai publishes no separate one
+    // (/privacy, /privacypolicy, /policies/* all 404 and the sitemap lists only
+    // /termsandservice). No DPA is published, and there is no public status
+    // page (status.jarvislabs.ai does not resolve; jarvislabs.statuspage.io is
+    // Atlassian's own generic page, not theirs).
+    privacy_policy_url: 'https://jarvislabs.ai/termsandservice',
+    terms_of_service_url: 'https://jarvislabs.ai/termsandservice',
+    status_page_url: null,
+    headquarters: 'IN',
+    datacenters: null,       // "On Jarvislabs GPUs in our India region" (Token Factory FAQ)
+    // Token Factory's page and FAQ say "We don't store your prompts or
+    // completions, and we don't train on them". That is product-page copy, not
+    // a reviewed policy verdict — the ToS never addresses inference inputs or
+    // outputs and reserves the right to retain "all information provided for as
+    // long as the information is needed" — so retains_prompts stays unset (the
+    // same stance as Zro and Refuseless). may_train follows the page's explicit
+    // no-training statement, which is the one claim the ToS does not contradict.
+    may_train: false,
+    retention_days: null,
+    retention_note: 'Token Factory states it does not store prompts or completions and does not train on them (product page and FAQ); the Terms of Service do not address inference content and reserve the right to retain "all information provided for as long as the information is needed". Cached input bills automatically with no cache-write fee.',
   },
   concentrate: {
     // concentrate.ai/privacy and /terms redirect to /auth/login (reviewed
@@ -1381,6 +1415,35 @@ async function main() {
   } catch (err) {
     out.providers.push({ key: 'inco', name: 'Inco', model_count: 0, status: `error: ${err.message}` });
     console.error(`✗ Inco: ${err.message}`);
+  }
+
+  // ── JarvisLabs Token Factory (public pricing page, Tier 1 with a snapshot) ──
+  // Its OpenAI-compatible catalog at models.jarvislabs.net/v1 is auth-gated
+  // (401 without a key), so the public product page is the price source. The
+  // loader reuses a snapshot younger than 24h, so the 2-hourly refresh hits the
+  // live page once a day, and falls back to the last-good snapshot on any
+  // fetch/parse/validation failure. Prices are already $/M, cached input maps
+  // to `cache_read`, and a $0 output is skipped and logged, never published as
+  // free output.
+  try {
+    const jarvislabs = await getJarvislabsCatalogRows();
+    if (jarvislabs.rows.length) {
+      out.providers.push({
+        key: 'jarvislabs',
+        name: 'JarvisLabs',
+        model_count: jarvislabs.rows.length,
+        status: `ok (${jarvislabs.source})`,
+      });
+      stampSource(jarvislabs.rows, 'direct');
+      tieredModels.push(...jarvislabs.rows);
+      console.log(`✓ JarvisLabs: ${jarvislabs.rows.length} models (${jarvislabs.source})`);
+    } else {
+      out.providers.push({ key: 'jarvislabs', name: 'JarvisLabs', model_count: 0, status: `error: ${jarvislabs.reason || 'no rows'}` });
+      console.warn(`⚠ JarvisLabs: no rows available (${jarvislabs.reason || 'no snapshot'})`);
+    }
+  } catch (err) {
+    out.providers.push({ key: 'jarvislabs', name: 'JarvisLabs', model_count: 0, status: `error: ${err.message}` });
+    console.error(`✗ JarvisLabs: ${err.message}`);
   }
 
   // ── Zro (official public pricing page, Tier 3 with direct-precedence) ──

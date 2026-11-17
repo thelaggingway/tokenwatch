@@ -1,0 +1,109 @@
+{
+  "source_url": "https://jarvislabs.ai/products/token-factory",
+  "fetched_at": "2026-11-17T20:36:00.182Z",
+  "models": [
+    {
+      "id": "deepseek-v4.1-flash-1017",
+      "name": "DeepSeek V4.1 Flash",
+      "input": 0.07,
+      "output": 0.49,
+      "cache_read": 0.003,
+      "context_length": 1000000,
+      "quantization": "fp8",
+      "input_modalities": [
+        "text",
+        "image"
+      ]
+    },
+    {
+      "id": "deepseek-v4.1-flash-1017-cyber",
+      "name": "DeepSeek V4.1 Flash Cyber",
+      "input": 0.3,
+      "output": 1,
+      "cache_read": 0.006,
+      "context_length": 1000000,
+      "quantization": "fp8",
+      "input_modalities": [
+        "text",
+        "image"
+      ]
+    },
+    {
+      "id": "gemma-4-26b-a4b-it",
+      "name": "Gemma 4 26B A4B IT",
+      "input": 0.11,
+      "output": 0.37,
+      "cache_read": 0.05,
+      "context_length": 256000,
+      "quantization": "bf16",
+      "input_modalities": [
+        "text",
+        "image"
+      ]
+    },
+    {
+      "id": "gemma-4-31b-it",
+      "name": "Gemma 4 31B IT",
+      "input": 0.14,
+      "output": 0.4,
+      "cache_read": 0.05,
+      "context_length": 256000,
+      "quantization": "bf16",
+      "input_modalities": [
+        "text",
+        "image"
+      ]
+    },
+    {
+      "id": "glm-5.3",
+      "name": "GLM-5.3",
+      "input": 0.7,
+      "output": 2.2,
+      "cache_read": 0.13,
+      "context_length": 230000,
+      "quantization": "fp8",
+      "input_modalities": [
+        "text"
+      ]
+    },
+    {
+      "id": "glm-5.3-flash",
+      "name": "GLM-5.3 Flash",
+      "input": 0.075,
+      "output": 0.25,
+      "cache_read": 0.015,
+      "context_length": 1000000,
+      "quantization": "fp8",
+      "input_modalities": [
+        "text",
+        "image"
+      ]
+    },
+    {
+      "id": "nemotron-3.5-super-vl-120b-a12b-nvfp4",
+      "name": "Nemotron 3.5 Super VL 120B A12B NVFP4",
+      "input": 0.15,
+      "output": 0.5,
+      "cache_read": 0.02,
+      "context_length": 1000000,
+      "quantization": "nvfp4",
+      "input_modalities": [
+        "text",
+        "image"
+      ]
+    },
+    {
+      "id": "qwen-3.8-27b-fp8",
+      "name": "Qwen 3.8 27B FP8",
+      "input": 0.3,
+      "output": 2.35,
+      "cache_read": 0.08,
+      "context_length": 256000,
+      "quantization": "fp8",
+      "input_modalities": [
+        "text",
+        "image"
+      ]
+    }
+  ]
+}
