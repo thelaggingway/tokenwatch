@@ -1373,6 +1373,237 @@ export function incoRowsFromSnapshot(snapshot) {
     }));
 }
 
+// -- JarvisLabs Token Factory (public pricing page) --------------------------
+
+/**
+ * JarvisLabs publishes Token Factory prices on its product page only: the
+ * OpenAI-compatible catalog at https://models.jarvislabs.net/v1 answers
+ * `401 A valid bearer token is required` without a key, so there is no public
+ * price endpoint to read.
+ *
+ * The page is a Next.js app that server-renders the same offerings TWICE — a
+ * mobile card list (`lg:hidden`) and the desktop <table>. The parser therefore
+ * reads only the <table> carrying the "USD per 1 million tokens" caption and
+ * never pairs a card row with a table row.
+ *
+ * Prices are already USD per 1M tokens, with a cached-input column and no
+ * cache-write fee (the page: "There is no cache-write fee and nothing to
+ * configure"), so no conversion is applied. Each row states its serving
+ * precision ("FP8", "BF16"), which lands in `quantization` because the schema
+ * already records it — the same values `quantFromId()` extracts from an id
+ * suffix.
+ */
+export const JARVISLABS_PRICING_URL = 'https://jarvislabs.ai/products/token-factory';
+/** Minimum priced offerings required for a parse to be considered complete. */
+export const JARVISLABS_MIN_ROWS = 5;
+/** Maximum tolerated row-count drop versus the last-good snapshot. */
+export const JARVISLABS_MAX_ROW_DROP = 0.25;
+/** Reuse window for the committed last-good snapshot. */
+export const JARVISLABS_SNAPSHOT_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Serving precisions the page prints beside a model name. */
+const JARVISLABS_PRECISION_RE = /^(fp8|nvfp4|mxfp4|fp6|fp4|bf16|fp16|int8|int4)$/i;
+/** One price cell: "$0.07", "$0.003", "$1.00". */
+const JARVISLABS_PRICE_RE = /^\$\s*([0-9]+(?:\.[0-9]+)?)$/;
+
+/** Visible text of an HTML fragment, entities and tags removed. */
+function jarvislabsCellText(html) {
+  return String(html ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&#x27;|&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** "1M" / "256K" / "230K" → token count, or null when the cell is unreadable. */
+function jarvislabsContext(cell) {
+  const m = String(cell ?? '').match(/^([0-9]+(?:\.[0-9]+)?)\s*([KM])$/i);
+  if (!m) return null;
+  const n = Number.parseFloat(m[1]);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * (m[2].toUpperCase() === 'M' ? 1_000_000 : 1_000));
+}
+
+/** The desktop pricing table (the one captioned "USD per 1 million tokens"). */
+function jarvislabsPricingTable(html) {
+  for (const m of String(html ?? '').matchAll(/<table\b[\s\S]*?<\/table>/gi)) {
+    if (/USD per 1 million tokens/i.test(m[0])) return m[0];
+  }
+  return '';
+}
+
+/**
+ * Every priced row in the table, including the ones a $0 tariff would make
+ * unpublishable. Callers filter; `parseJarvislabsPricingHtml()` is the entry
+ * point that applies the zero-output guard.
+ * @returns {Array<{id: string, name: string, input: number|null,
+ *   output: number|null, cache_read: number|null, context_length: number|null,
+ *   quantization: string|null, input_modalities: string[]|null}>}
+ */
+function jarvislabsTableRows(html) {
+  const table = jarvislabsPricingTable(html);
+  if (!table) return [];
+  const rows = [];
+  const seen = new Set();
+  for (const m of table.matchAll(/<tr\b[\s\S]*?<\/tr>/gi)) {
+    const row = m[0];
+    // The copy button names the exact id the API expects; the product link
+    // carries the same slug and is the fallback if the button markup changes.
+    const idMatch = row.match(/aria-label="Copy model ID ([^"]+)"/i)
+      || row.match(/href="\/products\/token-factory\/([^"]+)"/i);
+    if (!idMatch) continue;
+    const id = idMatch[1].trim().toLowerCase();
+    if (!id || seen.has(id)) continue;
+
+    const link = row.match(/<a href="\/products\/token-factory\/[^"]+"[^>]*>([\s\S]*?)<\/a>/i);
+    const name = link ? jarvislabsCellText(link[1]) : id;
+    // Serving precision is the span immediately after the model link.
+    const precision = row.match(/<a href="\/products\/token-factory\/[^"]+"[^>]*>[\s\S]*?<\/a>\s*<span[^>]*>([^<]+)<\/span>/i);
+    const quantLabel = precision && JARVISLABS_PRECISION_RE.test(precision[1].trim())
+      ? precision[1].trim().toLowerCase()
+      : null;
+
+    const capsBlock = row.match(/<ul aria-label="Capabilities"[\s\S]*?<\/ul>/i);
+    const caps = capsBlock
+      ? [...capsBlock[0].matchAll(/<span class="sr-only">([^<]+)<\/span>/gi)].map((c) => c[1].trim().toLowerCase())
+      : [];
+    const inputModalities = caps.includes('image input') ? ['text', 'image'] : ['text'];
+
+    // Cells in column order: Context, Input, Cached input, Output, Playground.
+    const cells = [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => jarvislabsCellText(c[1]));
+    const price = (index) => {
+      const cell = String(cells[index] ?? '');
+      const hit = cell.match(JARVISLABS_PRICE_RE);
+      return hit ? Number.parseFloat(hit[1]) : null;
+    };
+
+    seen.add(id);
+    rows.push({
+      id,
+      name,
+      input: price(1),
+      output: price(3),
+      cache_read: price(2),
+      context_length: jarvislabsContext(cells[0]),
+      quantization: quantLabel ?? quantFromId(id),
+      input_modalities: inputModalities,
+    });
+  }
+  return rows;
+}
+
+/**
+ * Ids JarvisLabs prices an input for but publishes a $0 output for. A zero
+ * output is a missing tariff, not a free one, so those rows are skipped
+ * instead of published as free.
+ * @param {string} html pricing page HTML
+ * @returns {string[]}
+ */
+export function jarvislabsZeroOutput(html) {
+  return jarvislabsTableRows(html)
+    .filter((r) => Number.isFinite(r.input) && r.input > 0 && r.output === 0)
+    .map((r) => r.id);
+}
+
+/**
+ * Scrape the Token Factory pricing table into normalized price rows.
+ * Pure function over the HTML string. Rows without a positive input AND
+ * output tariff are dropped — zero is a missing price, never free.
+ * @param {string} html pricing page HTML
+ * @returns {Array<object>} snapshot rows
+ */
+export function parseJarvislabsPricingHtml(html) {
+  return jarvislabsTableRows(html)
+    .filter((r) => Number.isFinite(r.input) && r.input > 0)
+    .filter((r) => Number.isFinite(r.output) && r.output > 0);
+}
+
+/**
+ * Loose sanity check that a display name belongs to an id: the name's first
+ * alphanumeric word ("gemma" from "Gemma 4 26B A4B IT") must appear in the id
+ * with punctuation removed. Catches cross-row mis-pairing without depending on
+ * exact marketing names.
+ */
+export function jarvislabsNameMatchesId(name, id) {
+  const first = String(name ?? '').toLowerCase().match(/[a-z0-9]+/);
+  if (!first) return true;
+  const flatId = String(id ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return flatId.includes(first[0]);
+}
+
+/**
+ * Fail-closed validation of a JarvisLabs snapshot: partial parses, duplicate
+ * ids, non-positive prices, a sub-floor row count, mismatched names, or a large
+ * row-count drop versus last-good all reject it.
+ * @param {{models?: Array}} snapshot
+ * @param {{previous?: {models?: Array}|null}} [options]
+ */
+export function validateJarvislabsSnapshot(snapshot, { previous = null } = {}) {
+  const models = snapshot?.models;
+  if (!Array.isArray(models)) throw new Error('jarvislabs snapshot: models must be an array');
+  if (models.length < JARVISLABS_MIN_ROWS) {
+    throw new Error(`jarvislabs snapshot: ${models.length} rows is below the ${JARVISLABS_MIN_ROWS}-row minimum floor`);
+  }
+  const seen = new Set();
+  for (const [index, m] of models.entries()) {
+    if (!m || typeof m !== 'object') throw new Error(`jarvislabs snapshot: row ${index} is not an object`);
+    const id = typeof m.id === 'string' ? m.id.trim() : '';
+    if (!id) throw new Error(`jarvislabs snapshot: row ${index} has an empty/invalid id`);
+    if (seen.has(id)) throw new Error(`jarvislabs snapshot: duplicate model id "${id}"`);
+    seen.add(id);
+    if (!Number.isFinite(m.input) || m.input <= 0) throw new Error(`jarvislabs snapshot: "${id}" has a non-positive input price`);
+    if (!Number.isFinite(m.output) || m.output <= 0) throw new Error(`jarvislabs snapshot: "${id}" has a non-positive output price`);
+    if (m.name && !jarvislabsNameMatchesId(m.name, id)) {
+      throw new Error(`jarvislabs snapshot: display name "${m.name}" does not match id "${id}"`);
+    }
+  }
+  const previousModels = previous?.models;
+  if (Array.isArray(previousModels) && previousModels.length > 0) {
+    const floor = previousModels.length * (1 - JARVISLABS_MAX_ROW_DROP);
+    if (models.length < floor) {
+      throw new Error(
+        `jarvislabs snapshot: row count dropped more than ${Math.round(JARVISLABS_MAX_ROW_DROP * 100)}% ` +
+        `(${models.length} vs ${previousModels.length} last-good)`,
+      );
+    }
+  }
+  return true;
+}
+
+/** True when a snapshot's fetched_at is within the reuse TTL of `now`. */
+export function jarvislabsSnapshotFresh(snapshot, now = Date.now()) {
+  const fetchedAt = snapshot?.fetched_at ? Date.parse(snapshot.fetched_at) : NaN;
+  if (!Number.isFinite(fetchedAt)) return false;
+  const age = now - fetchedAt;
+  return age >= 0 && age < JARVISLABS_SNAPSHOT_TTL_MS;
+}
+
+/** Snapshot rows → catalog records. Non-positive prices are dropped. */
+export function jarvislabsRowsFromSnapshot(snapshot) {
+  const models = Array.isArray(snapshot?.models) ? snapshot.models : [];
+  return models
+    .filter((m) => m && typeof m.id === 'string' && m.id.trim())
+    .filter((m) => Number.isFinite(m.input) && m.input > 0 && Number.isFinite(m.output) && m.output > 0)
+    .map((m) => ({
+      id: m.id.trim(),
+      name: m.name || m.id.trim(),
+      org: orgFromBareModelId(m.id),
+      provider: 'jarvislabs',
+      quantization: m.quantization ?? quantFromId(m.id),
+      discount: 0,
+      context_length: Number.isFinite(m.context_length) ? m.context_length : null,
+      input_modalities: Array.isArray(m.input_modalities) ? m.input_modalities : null,
+      pricing: {
+        input: m.input,
+        output: m.output,
+        cache_read: Number.isFinite(m.cache_read) ? m.cache_read : null,
+        cache_write: null,
+      },
+    }));
+}
+
 /** Filter out non-text models by ID pattern. */
 export const NON_TEXT_ID = /(?:^|[-/])(embed|embedding|embeddinggemma|clip|bge|tts|bark|parler|kokoro|openvoice)(?:[-/]|$)/i;
 export function isTextModel(id) {

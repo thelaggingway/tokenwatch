@@ -88,7 +88,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/aa-benchmarks.json data/arena-benchmarks.json data/inco-pricing.json data/fx-inr-usd.json public/pricing.json public/benchmarks.json public/docs/methodology/index.html
+          git add data/aa-benchmarks.json data/arena-benchmarks.json data/inco-pricing.json data/jarvislabs-pricing.json data/fx-inr-usd.json public/pricing.json public/benchmarks.json public/docs/methodology/index.html
           if git diff --cached --quiet; then
             echo "No benchmark/catalog changes — skipping commit; recovery may still deploy."
           else

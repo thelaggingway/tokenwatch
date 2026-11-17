@@ -414,6 +414,7 @@ function prettyProvider(provider) {
     neuralwatt: 'Neuralwatt',
     aster: 'Aster Labs',
     zro: 'Zro',
+    jarvislabs: 'JarvisLabs',
   };
   if (special[provider]) return special[provider];
   return provider.split('-').map((part) => part ? part[0].toUpperCase() + part.slice(1) : '').join(' ');
