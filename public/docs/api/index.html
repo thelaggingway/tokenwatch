@@ -35,7 +35,7 @@
     <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Text pricing</a><span aria-hidden="true">/</span><a href="/docs/api/">API documentation</a></nav>
     <article class="seo-prose">
       <h2>Public JSON API</h2>
-      <p>All endpoints accept GET requests and return JSON with permissive CORS headers. List endpoints paginate with <code>limit</code> and <code>offset</code>; the limit is clamped to 1–500 and defaults to 100. A machine-readable <a href="/openapi.json">OpenAPI 3.1 description</a> is also available.</p>
+      <p>All endpoints accept GET requests and return JSON with permissive CORS headers. List endpoints paginate with <code>limit</code> and <code>offset</code>; the limit is clamped to 1–500 and defaults to 100. Malformed parameters return 400 with a stable <code>code</code>. Successful responses are compact JSON (add <code>pretty=1</code> to indent), cacheable for five minutes, and carry an <code>ETag</code>, so a request with <code>If-None-Match</code> returns 304 when nothing changed. A machine-readable <a href="/openapi.json">OpenAPI 3.1 description</a> is also available.</p>
       <p>Recommendation mixes are assumed workload defaults, not claims about your traffic. Model picks include best quality, best value, and the cheapest model above an absolute quality floor; explanations label benchmark coverage, provider ranking, missing signals, and confidence. Provider ranking requires confirmed capability and context metadata and keeps unverified options separate.</p>
       <p>For <code>chat-assistant</code> and <code>creative-writing</code>, <code>/api/v1/recommend</code> also returns <code>preference</code> separately from model picks: the Arena favorite, board, rating, eligible providers, and <code>source</code> metadata with linked dataset, rating date, attribution, and CC BY 4.0 license. Creative writing is preference-led; chat picks remain capability-ranked. The source metadata lets API consumers display the required attribution alongside Arena ratings.</p>
       <p>Recommendation responses default to compact candidate groups (up to 10 rows each, with total counts) and full explanations on the three model picks. Provider results keep full explanations on the top three. Add <code>detail=full</code> to expand explanations for returned rows, or set <code>limit=1..100</code> to change each group cap. Recommendation JSON is compact (no indentation); add <code>pretty=1</code> for indented output.</p>
@@ -74,8 +74,8 @@
           <li><code>exclude_hq</code> <em>string</em> — Comma-separated ISO 3166-1 alpha-2 headquarters country codes to exclude. Providers with unknown headquarters are kept, not excluded. A code that is not a real country code is a 400.</li>
           <li><code>include_proprietary</code> <em>boolean, default false</em> — When <code>true</code>, also consider models not confirmed open-weight. Defaults to open-weight models only.</li>
           <li><code>detail</code> <em>string, default compact</em> (<code>compact</code>, <code>full</code>) — <code>compact</code> returns summary rows with total counts; <code>full</code> adds explanations and per-provider detail to every returned row, which enlarges the payload by orders of magnitude.</li>
-          <li><code>limit</code> <em>integer, default 10</em> — Maximum rows per recommendation group. Unlike the list routes, an out-of-range value is a 400 rather than a silent clamp.</li>
-          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Responses are compact by default.</li>
+          <li><code>limit</code> <em>integer, default 10</em> — Maximum rows per recommendation group (1–100), or at most 25 with <code>detail=full</code>. An out-of-range value is a 400 rather than a clamp.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag.</li>
         </ul>
         <h3><code>/api/v1/recommend/providers</code></h3>
         <ul>
@@ -86,8 +86,8 @@
           <li><code>exclude_hq</code> <em>string</em> — Comma-separated ISO 3166-1 alpha-2 headquarters country codes to exclude. Providers with unknown headquarters are kept, not excluded. A code that is not a real country code is a 400.</li>
           <li><code>include_proprietary</code> <em>boolean, default false</em> — When <code>true</code>, also rank providers of models not confirmed open-weight. Without it a closed model ranks no providers and returns an explanatory <code>message</code>.</li>
           <li><code>detail</code> <em>string, default compact</em> (<code>compact</code>, <code>full</code>) — <code>compact</code> returns summary rows with total counts; <code>full</code> adds explanations and per-provider detail to every returned row, which enlarges the payload by orders of magnitude.</li>
-          <li><code>limit</code> <em>integer, default 10</em> — Maximum rows per recommendation group. Unlike the list routes, an out-of-range value is a 400 rather than a silent clamp.</li>
-          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Responses are compact by default.</li>
+          <li><code>limit</code> <em>integer, default 10</em> — Maximum rows per recommendation group (1–100), or at most 25 with <code>detail=full</code>. An out-of-range value is a 400 rather than a clamp.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag.</li>
         </ul>
         <h3><code>/api/v1/models</code></h3>
         <ul>
