@@ -34,12 +34,22 @@ cp wrangler.d1.toml wrangler.toml
 # Apply migrations to the local (Wrangler .wrangler/state) D1 database.
 npx wrangler d1 migrations apply tokenwatch-price-history --local
 
-# Seed the local database from public/pricing.json for one UTC day.
+# Seed the local database from public/pricing.json for one UTC day...
 node scripts/snapshot-prices.mjs --local --date 2026-09-14
+
+# ...or several days with deterministic per-day variation (recommended when
+# testing the history chart: a single day is a flat, switch-free line).
+node scripts/snapshot-prices.mjs --local --seed-days 7 --vary
 
 # Serve the Pages app + Functions against that local database.
 npx wrangler pages dev public --port 8788
 ```
+
+`--seed-days` is local-only and refuses to run without `--local`; it never
+reaches remote D1. `wrangler pages dev --d1 ...` is **not** a substitute for the
+copied config: it binds a new empty database, so the history route answers 503
+with `no such table: price_snapshot`. See the README's "Local Pages Functions
+with D1 price history" section for the full workflow and the deploy hazard.
 
 `wrangler pages dev` reads `[[d1_databases]]` from the local `wrangler.toml`,
 so the Functions get `env.PRICE_HISTORY` pointed at `.wrangler/state/v3/d1`
