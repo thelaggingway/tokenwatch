@@ -642,7 +642,7 @@ function strongETag(body) {
 }
 
 async function withETag(context, response) {
-  if (response.status !== 200 || context.request.method === 'HEAD') return response;
+  if (response.status !== 200) return response;
   let body = await response.text();
   // `pretty=1` is opt-in on every data route. The handlers build compact JSON
   // by default, so re-format here rather than threading the flag through each
@@ -1154,6 +1154,8 @@ export async function onRequestGet(context) {
  * (generated_at / ETag) without transferring the payload.
  */
 export async function onRequestHead(context) {
-  const response = await handleGet(context);
+  // Build the same response GET would, so HEAD carries an identical header set
+  // (including the ETag and a matching 304) and only omits the body.
+  const response = await withETag(context, await handleGet(context));
   return new Response(null, { status: response.status, headers: response.headers });
 }
