@@ -171,29 +171,37 @@ test('history drops a day whose only offering has no published price', async () 
     'an unpriceable day must stay absent, never $0');
 });
 
-test('every use-case preset produces the same /recommend picks as before the cost change', async () => {
+test('the blendedRate change only affects legs with no price at all, for every preset and offering', async () => {
+  // Checked per offering rather than against a golden capture of /recommend picks,
+  // which would break on every two-hourly catalog refresh. blendedRate is the only
+  // recommender input this change touches, so identical rates imply identical picks.
   const { USE_CASES } = await import('../shared/use-cases.mjs');
-  const { shortlistModels } = await import('../shared/recommend.mjs');
-  const read = async (name) => JSON.parse(await readFile(join(ROOT, 'public', name), 'utf8'));
-  const [pricing, benchmarks, performance] = await Promise.all([
-    read('pricing.json'), read('benchmarks.json'), read('performance.json'),
-  ]);
-  const expected = JSON.parse(await readFile(join(__dirname, 'fixtures', 'recommend-presets.json'), 'utf8'));
+  const { blendedRate, freshInputRate } = await import('../shared/cost.mjs');
+  const pricing = JSON.parse(await readFile(join(ROOT, 'public', 'pricing.json'), 'utf8'));
 
-  assert.deepEqual(Object.keys(expected).sort(), Object.keys(USE_CASES).sort(), 'fixture covers every preset');
-  const ids = (list) => (list || []).map((item) => item.id);
-  for (const useCase of Object.keys(USE_CASES)) {
-    const result = shortlistModels(useCase, pricing.models, { benchmarks, performance });
-    const actual = {
-      bestQuality: result.bestQuality?.id ?? null,
-      bestValue: result.bestValue?.id ?? null,
-      cheapestAboveFloor: result.cheapestAboveFloor?.id ?? null,
-      qualityRanking: ids(result.qualityRanking),
-      paretoFrontier: ids(result.paretoFrontier),
-      partiallyBenchmarked: ids(result.partiallyBenchmarked),
-      unbenchmarked: ids(result.unbenchmarked),
-      unverified: ids(result.unverified),
-    };
-    assert.deepEqual(actual, expected[useCase], `${useCase} picks/order changed`);
+  // The formula as it was before this PR.
+  const previous = (p, { inputPct, cacheReadPct, outputPct }) => {
+    const inputPrice = freshInputRate(p);
+    const inRate = inputPrice != null ? inputPrice * inputPct / 100 : null;
+    const outRate = p.output != null ? p.output * outputPct / 100 : null;
+    const crPrice = p.cache_read != null ? p.cache_read : p.input;
+    const crRate = crPrice != null ? crPrice * cacheReadPct / 100 : null;
+    if (inputPct > 0 && inRate === null) return null;
+    if (outputPct > 0 && outRate === null) return null;
+    return (inRate || 0) + (outRate || 0) + (crRate || 0);
+  };
+
+  for (const [id, useCase] of Object.entries(USE_CASES)) {
+    const mix = useCase.mix;
+    assert.ok(mix.inputPct + mix.cacheReadPct + mix.outputPct > 0, `${id} has a non-empty mix`);
+    for (const model of pricing.models) {
+      const p = model.pricing || {};
+      const now = blendedRate(p, mix);
+      if (mix.cacheReadPct > 0 && p.cache_read == null && p.input == null) {
+        assert.equal(now, null, `${id}: ${model.id} has no cache-read or input price`);
+      } else {
+        assert.equal(now, previous(p, mix), `${id}: ${model.id} rate changed`);
+      }
+    }
   }
 });
