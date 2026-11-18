@@ -105,7 +105,7 @@ export const API_ENDPOINTS = [
   {
     path: '/api/v1/images/:id',
     summary: 'Return one image model with its pricing variants',
-    params: [],
+    params: ['pretty'],
     sort: [],
   },
   {
@@ -117,7 +117,7 @@ export const API_ENDPOINTS = [
   {
     path: '/api/v1/videos/:id',
     summary: 'Return one video model with its pricing variants',
-    params: [],
+    params: ['pretty'],
     sort: [],
   },
 ];

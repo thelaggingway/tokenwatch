@@ -1513,6 +1513,22 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
+            }
           }
         ],
         "responses": {
@@ -1716,6 +1732,22 @@
             "description": "Model id. Slashes (`org/model`) and `%2F` percent-encoding are accepted; matching is on the normalized id.",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
             }
           }
         ],

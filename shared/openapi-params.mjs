@@ -302,7 +302,7 @@ export const PARAMETER_DOCS = {
     offset: PAGINATION.offset,
     pretty: PRETTY,
   },
-  '/api/v1/images/:id': {},
+  '/api/v1/images/:id': { pretty: PRETTY },
   '/api/v1/videos': {
     ...MEDIA_FILTERS,
     sort: MEDIA_SORT,
@@ -311,7 +311,7 @@ export const PARAMETER_DOCS = {
     offset: PAGINATION.offset,
     pretty: PRETTY,
   },
-  '/api/v1/videos/:id': {},
+  '/api/v1/videos/:id': { pretty: PRETTY },
 };
 
 /** Path parameter docs for the templated routes. */
