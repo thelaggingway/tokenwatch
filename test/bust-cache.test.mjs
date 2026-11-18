@@ -50,3 +50,17 @@ test('chooser source script and shared ESM modules revalidate when served withou
     assert.match(headers, new RegExp(`${escaped}\\n  Cache-Control: public, max-age=0, must-revalidate`));
   }
 });
+
+test('advisor widget is path-fingerprinted and revalidates when served unhashed', async () => {
+  // Four pages reference /advisor-widget.js?v=dev, and ?v= has been observed to
+  // miss at the custom-domain edge. Without a hashed path a widget fix keeps
+  // serving from cache after deploy.
+  assert.equal(baseAssetName('/advisor-widget.js?v=dev'), 'advisor-widget.js');
+  assert.equal(baseAssetName('/h/advisor-widget.abcdef12.js'), 'advisor-widget.js');
+
+  const headers = await readFile(new URL('../public/_headers', import.meta.url), 'utf8');
+  assert.match(
+    headers,
+    /\/advisor-widget\.js\n  Cache-Control: public, max-age=0, must-revalidate/,
+  );
+});
