@@ -45,6 +45,7 @@ const FINGERPRINT = new Set([
   'price-sparkline.js',
   'model-history.js',
   'choose-app.js',
+  'advisor-widget.js',
 ]);
 
 // href/src="..." capturing the path (with optional ?query)

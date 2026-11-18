@@ -148,6 +148,19 @@
 
     let conversationHistory = [];
 
+    /**
+     * Bound the relayed conversation: the API rejects more than 12 messages or
+     * 12,000 total characters, and it few-shot only reads the last 6. Trimming
+     * here keeps a long session from failing its next turn with a 400.
+     */
+    function recentHistory(history) {
+      const trimmed = history.slice(-12);
+      while (trimmed.length && trimmed.reduce((n, m) => n + m.content.length, 0) > 12000) {
+        trimmed.shift();
+      }
+      return trimmed;
+    }
+
     function updateQuotaDisplay() {
       const q = getQuota();
       const remaining = Math.max(0, MAX_QUERIES - q.count);
@@ -266,7 +279,7 @@
         const res = await fetch('/api/advisor', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: conversationHistory }),
+          body: JSON.stringify({ messages: recentHistory(conversationHistory) }),
         });
 
         loadingMsg.remove();

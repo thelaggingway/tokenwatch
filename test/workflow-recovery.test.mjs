@@ -106,6 +106,7 @@ test('PR CI tests and builds the production surface without fetching or deployin
   const commands = [...ci.matchAll(/^        run: (.+)$/gm)].map(match => match[1]);
   assert.deepEqual(commands, [
     'node --test test/*.test.mjs',
+    'node scripts/check-no-local-wrangler.mjs',
     'node scripts/generate-seo.mjs',
     'node scripts/verify-seo.mjs',
     'node scripts/bust-cache.mjs',
