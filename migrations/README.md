@@ -140,8 +140,11 @@ stored. It affects that day only; no other day's claim is touched.
 
 ## Advisor quota D1 setup (optional — NOT yet provisioned)
 
-`migrations/0004_advisor_quota.sql` adds `advisor_quota_usage`, which backs the
-advisor's daily quota. **Nothing here is provisioned or applied remotely.**
+`migrations-advisor/0001_advisor_quota.sql` adds `advisor_quota_usage`, which
+backs the advisor's daily quota. **Nothing here is provisioned or applied
+remotely.** It lives outside `migrations/` on purpose: `wrangler.history.toml`
+and `wrangler.d1.toml` set `migrations_dir = "migrations"`, so a file there would
+be applied to the price-history database on its next migration run.
 Until the owner performs the steps below, `functions/api/advisor.js` falls back
 to its per-isolate in-memory limiter, so the endpoint keeps working either way.
 
@@ -160,10 +163,11 @@ Owner provisioning, after creating the database in the Cloudflare dashboard
 ```bash
 # 1. Bind it to the Pages project:
 #    Settings → Functions → D1 bindings → variable name ADVISOR_QUOTA.
-# 2. Apply the migration. No Wrangler config in this repo binds the advisor
-#    database, so name the target explicitly and confirm it is the right one:
-npx --yes wrangler@4.147.0 d1 migrations apply tokenwatch-advisor-quota --remote \
-  --migrations-dir migrations
+# 2. Create the table. No Wrangler config in this repo binds the advisor
+#    database, so name the target explicitly and confirm it is the right one
+#    (the SQL is idempotent: CREATE ... IF NOT EXISTS):
+npx --yes wrangler@4.147.0 d1 execute tokenwatch-advisor-quota --remote \
+  --file migrations-advisor/0001_advisor_quota.sql
 # 3. Create the salt and store it as an encrypted Pages variable:
 npx --yes wrangler@4.147.0 pages secret put ADVISOR_IP_SALT \
   --project-name payg-inference-calculator
@@ -171,6 +175,6 @@ npx --yes wrangler@4.147.0 pages secret put ADVISOR_IP_SALT \
 #    DELETE FROM advisor_quota_usage WHERE utc_day < date('now', '-7 days');
 ```
 
-`0004` is independent of the price-history migrations and can live in its own
-database. Do not add the binding to `wrangler.d1.toml` or a local
+The advisor schema is independent of the price-history migrations and belongs
+in its own database. Do not add the binding to `wrangler.d1.toml` or a local
 `wrangler.toml`; Pages bindings for this project are dashboard-managed.

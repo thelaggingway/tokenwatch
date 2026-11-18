@@ -11,6 +11,18 @@ import assert from 'node:assert/strict';
 
 const advisor = await import('../functions/api/advisor.js');
 
+test('advisor quota schema stays out of the price-history migrations directory', async () => {
+  // wrangler.history.toml applies everything in migrations/ to the price-history DB.
+  const { readdir, readFile } = await import('node:fs/promises');
+  const dir = new URL('../migrations/', import.meta.url);
+  for (const name of (await readdir(dir)).filter((f) => f.endsWith('.sql'))) {
+    const sql = await readFile(new URL(name, dir), 'utf8');
+    assert.doesNotMatch(sql, /advisor_quota_usage/, `${name} must not create advisor tables`);
+  }
+  const advisorSql = await readFile(new URL('../migrations-advisor/0001_advisor_quota.sql', import.meta.url), 'utf8');
+  assert.match(advisorSql, /CREATE TABLE IF NOT EXISTS advisor_quota_usage/);
+});
+
 const BASE_ENV = {
   INFERX_BASE_URL: 'https://advisor.invalid/v1',
   INFERX_API_KEY: 'test-placeholder',

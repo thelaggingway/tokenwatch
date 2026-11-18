@@ -1,4 +1,4 @@
--- 0004_advisor_quota.sql — durable daily advisor quota.
+-- migrations-advisor/0001_advisor_quota.sql — durable daily advisor quota.
 --
 -- Why: the handler's original limiter is an in-memory Map, so each edge
 -- isolate (and each new isolate after eviction) had its own 4-query counter.
