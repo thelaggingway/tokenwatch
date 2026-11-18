@@ -42,11 +42,17 @@ const CORS_HEADERS = {
   'X-Robots-Tag': 'noindex',
 };
 
-function json(data, status = 200, { pretty = true } = {}) {
-  return new Response(pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data), {
-    status,
-    headers: CORS_HEADERS,
-  });
+// Data responses are cacheable for a short window: the underlying catalogs
+// refresh every two hours, so 5 minutes keeps a shared cache useful without
+// serving a stale price beyond one refresh cycle.
+const CACHE_HEADERS = {
+  'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
+};
+
+function json(data, status = 200, { pretty = false } = {}) {
+  const body = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
+  const headers = { ...CORS_HEADERS, ...(status === 200 ? CACHE_HEADERS : { 'Cache-Control': 'no-store' }) };
+  return new Response(body, { status, headers });
 }
 
 /**
@@ -113,6 +119,18 @@ function parseRecommendationParams(params, { requireModel = false } = {}) {
       return { ok: false, error: 'limit must be an integer between 1 and 100', parameter: 'limit' };
     }
     limit = Number(value);
+  }
+
+  // `detail=full` returns each candidate with every explanation and prepared
+  // offering. At limit=100 that is roughly 4 MB of JSON, so the combination is
+  // capped instead of letting one request serialize the whole corpus.
+  const MAX_FULL_DETAIL_LIMIT = 25;
+  if (detail === 'full' && limit > MAX_FULL_DETAIL_LIMIT) {
+    return {
+      ok: false,
+      error: `limit must be ${MAX_FULL_DETAIL_LIMIT} or less when detail=full; use detail=compact for larger pages`,
+      parameter: 'limit',
+    };
   }
 
   const zdr = parseOptionalBoolean(params, 'zdr');
@@ -307,6 +325,35 @@ function listCost(model) {
   const { input, output } = model.pricing || {};
   if (input == null && output == null) return Infinity;
   return (input ?? 0) + (output ?? 0);
+}
+
+// ── Asset cache ───────────────────────────────────────────────────────────────
+
+/**
+ * Parsed-asset cache held in module scope for the isolate, keyed by filename.
+ *
+ * The catalogs only change when a deploy replaces them, and re-parsing
+ * pricing.json (4.4 MB, ~20 ms CPU plus the asset read) on every request
+ * dominated the handler. Each entry records the asset's ETag; when the asset
+ * still carries that ETag the parsed body is reused, so a refreshed catalog is
+ * always picked up by the next request rather than served stale.
+ */
+const assetCache = new Map();
+
+async function loadAssetJson(context, filename) {
+  const { request, env } = context;
+  const cached = assetCache.get(filename);
+  const response = await env.ASSETS.fetch(new URL(`/${filename}`, request.url));
+  if (!response.ok) throw new Error(`${filename} not found: ${response.status}`);
+
+  // Reuse only on a matching ETag: without one there is no cheap way to prove
+  // the asset is unchanged, so the body is parsed again.
+  const etag = response.headers.get('ETag');
+  if (cached && etag && cached.etag === etag) return cached.data;
+
+  const data = await response.json();
+  assetCache.set(filename, { etag, generatedAt: data?.generated_at ?? null, data });
+  return data;
 }
 
 /**
@@ -580,28 +627,64 @@ async function recommendationResponse(context, pricing, providersOnly) {
   }, 200, { pretty: parsed.pretty });
 }
 
-export async function onRequestGet(context) {
+/**
+ * Strong ETag over the exact response bytes, so a conditional request can be
+ * answered with 304 and no body. FNV-1a is used because Workers' SubtleCrypto
+ * digest is async and this runs on every response.
+ */
+function strongETag(body) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < body.length; i += 1) {
+    hash ^= body.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `"${(hash >>> 0).toString(16)}-${body.length.toString(16)}"`;
+}
+
+async function withETag(context, response) {
+  if (response.status !== 200 || context.request.method === 'HEAD') return response;
+  let body = await response.text();
+  // `pretty=1` is opt-in on every data route. The handlers build compact JSON
+  // by default, so re-format here rather than threading the flag through each
+  // route's json() call.
+  if (new URL(context.request.url).searchParams.get('pretty') === '1'
+    || new URL(context.request.url).searchParams.get('pretty') === 'true') {
+    body = `${JSON.stringify(JSON.parse(body), null, 2)}`;
+  }
+  const etag = strongETag(body);
+  const headers = new Headers(response.headers);
+  headers.set('ETag', etag);
+  if (context.request.headers.get('If-None-Match') === etag) {
+    return new Response(null, { status: 304, headers });
+  }
+  return new Response(body, { status: 200, headers });
+}
+
+async function handleGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/api\/v1/, '').replace(/^\//, '');
   const params = url.searchParams;
 
-  // Load pricing.json from static assets
-  let pricing;
-  try {
-    const res = await env.ASSETS.fetch(new URL('/pricing.json', request.url));
-    if (!res.ok) throw new Error(`pricing.json not found: ${res.status}`);
-    pricing = await res.json();
-    // A truncated or replaced catalog must not surface as an uncaught TypeError
-    // from every route that iterates pricing.models.
-    if (!pricing || !Array.isArray(pricing.models)) throw new Error('pricing.json is missing its models array');
-  } catch (err) {
-    console.error('Failed to load pricing data:', err?.message || err);
-    return errorJson('catalog_unavailable', 'Failed to load pricing data', 503);
-  }
+  // Pricing is loaded lazily: /images and /videos never touch it, so they must
+  // not pay to read and parse a 4.4 MB catalog they do not use.
+  const pricingOrError = async () => {
+    try {
+      const pricing = await loadAssetJson(context, 'pricing.json');
+      // A truncated or replaced catalog must not surface as an uncaught
+      // TypeError from every route that iterates pricing.models.
+      if (!pricing || !Array.isArray(pricing.models)) throw new Error('pricing.json is missing its models array');
+      return { pricing };
+    } catch (err) {
+      console.error('Failed to load pricing data:', err?.message || err);
+      return { response: errorJson('catalog_unavailable', 'Failed to load pricing data', 503) };
+    }
+  };
 
   // ── Route: /api/v1/ (empty path) → API info ──
   if (!path || path === '') {
+    const { pricing, response } = await pricingOrError();
+    if (response) return response;
     return json({
       generated_at: pricing.generated_at,
       model_count: pricing.models.length,
@@ -613,6 +696,8 @@ export async function onRequestGet(context) {
 
   // ── Route: /api/v1/stats ──
   if (path === 'stats') {
+    const { pricing, response } = await pricingOrError();
+    if (response) return response;
     const providers = {};
     const orgs = {};
     const quantizations = {};
@@ -646,6 +731,8 @@ export async function onRequestGet(context) {
 
   // ── Route: /api/v1/orgs ──
   if (path === 'orgs') {
+    const { pricing, response } = await pricingOrError();
+    if (response) return response;
     const orgs = {};
     for (const m of pricing.models) {
       orgs[m.org] = (orgs[m.org] || 0) + 1;
@@ -662,6 +749,8 @@ export async function onRequestGet(context) {
 
   // ── Route: /api/v1/providers[?zdr=true] ──
   if (path === 'providers') {
+    const { pricing, response } = await pricingOrError();
+    if (response) return response;
     let meta = pricing.providers_meta || {};
     const zdrParam = parseOptionalBoolean(params, 'zdr');
     if (!zdrParam.ok) return invalidParameter('zdr', zdrParam.error);
@@ -680,12 +769,17 @@ export async function onRequestGet(context) {
   }
 
   // ── Workload-aware model and provider recommendations ──
-  if (path === 'use-cases') return useCasesResponse(pricing);
-  if (path === 'recommend') return recommendationResponse(context, pricing, false);
-  if (path === 'recommend/providers') return recommendationResponse(context, pricing, true);
+  if (path === 'use-cases' || path === 'recommend' || path === 'recommend/providers') {
+    const { pricing, response } = await pricingOrError();
+    if (response) return response;
+    if (path === 'use-cases') return useCasesResponse(pricing);
+    return recommendationResponse(context, pricing, path === 'recommend/providers');
+  }
 
   // ── Route: /api/v1/models[/:canonicalId/providers|/:canonicalId/history] ──
   if (path === 'models' || path.startsWith('models/')) {
+    const { pricing, response } = await pricingOrError();
+    if (response) return response;
     // 'models' → '' (list); 'models/<rest>' → '<rest>'
     const subPath = path === 'models' ? '' : path.replace(/^models\//, '');
 
@@ -886,9 +980,7 @@ export async function onRequestGet(context) {
   if (path === 'images' || path.startsWith('images/')) {
     let imagePricing;
     try {
-      const res = await env.ASSETS.fetch(new URL('/image-pricing.json', request.url));
-      if (!res.ok) throw new Error(`image-pricing.json not found: ${res.status}`);
-      imagePricing = await res.json();
+      imagePricing = await loadAssetJson(context, 'image-pricing.json');
     } catch (err) {
       console.error('Failed to load image pricing data:', err?.message || err);
       return errorJson('catalog_unavailable', 'Failed to load image pricing data', 503);
@@ -968,9 +1060,7 @@ export async function onRequestGet(context) {
   if (path === 'videos' || path.startsWith('videos/')) {
     let videoPricing;
     try {
-      const res = await env.ASSETS.fetch(new URL('/video-pricing.json', request.url));
-      if (!res.ok) throw new Error(`video-pricing.json not found: ${res.status}`);
-      videoPricing = await res.json();
+      videoPricing = await loadAssetJson(context, 'video-pricing.json');
     } catch (err) {
       console.error('Failed to load video pricing data:', err?.message || err);
       return errorJson('catalog_unavailable', 'Failed to load video pricing data', 503);
@@ -1054,11 +1144,16 @@ export async function onRequestOptions() {
   return new Response(null, { headers: CORS_HEADERS });
 }
 
+/** GET plus a strong ETag and a 304 fast path for conditional requests. */
+export async function onRequestGet(context) {
+  return withETag(context, await handleGet(context));
+}
+
 /**
  * HEAD mirrors GET headers without a body, so a monitor can check freshness
  * (generated_at / ETag) without transferring the payload.
  */
 export async function onRequestHead(context) {
-  const response = await onRequestGet(context);
+  const response = await handleGet(context);
   return new Response(null, { status: response.status, headers: response.headers });
 }
