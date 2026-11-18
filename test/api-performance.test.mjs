@@ -131,6 +131,21 @@ test('HEAD returns the GET headers with no body', async () => {
   assert.equal(head.text, '');
   assert.equal(head.headers.get('Cache-Control'), 'public, max-age=300, stale-while-revalidate=600');
   assert.equal(head.headers.get('X-Content-Type-Options'), 'nosniff');
+
+  // HEAD must advertise the same validators as GET, so a cache or monitor can
+  // revalidate without downloading the payload.
+  const body = await get('/api/v1/stats');
+  assert.equal(head.headers.get('ETag'), body.headers.get('ETag'), 'HEAD carries the GET ETag');
+
+  const conditional = await get('/api/v1/stats', '', { method: 'HEAD', headers: { 'If-None-Match': head.headers.get('ETag') } });
+  assert.equal(conditional.status, 304, 'HEAD honours If-None-Match like GET');
+  assert.equal(conditional.text, '');
+
+  // An error is still an error under HEAD, with no body.
+  const missing = await get('/api/v1/does-not-exist', '', { method: 'HEAD' });
+  assert.equal(missing.status, 404);
+  assert.equal(missing.text, '');
+  assert.equal(missing.headers.get('Cache-Control'), 'no-store');
 });
 
 test('detail=full is capped at limit 25 with a clear 400', async () => {
