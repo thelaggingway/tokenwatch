@@ -1731,7 +1731,8 @@ function costFor(pricing, tokens) {
 
 /** Blended $/M: the effective per-million-token rate at the current input/cache/output mix.
  *  Uses the same fresh-input write assumption as costFor, but excludes token
- *  volume and monthly scaling. Missing cache-read pricing uses original input. */
+ *  volume and monthly scaling. Missing cache-read pricing uses original input;
+ *  a leg with a nonzero share and no price at all makes the mix unpriceable. */
 function blendedCostFor(pricing, tokens) {
   const inputPrice = freshInputRate(pricing);
   const inRate   = inputPrice != null ? inputPrice * tokens.inputPct / 100 : null;
@@ -1740,6 +1741,8 @@ function blendedCostFor(pricing, tokens) {
   const crRate   = crPrice != null ? crPrice * tokens.cacheReadPct / 100 : null;
   if (tokens.inputPct > 0 && inRate === null) return null;
   if (tokens.outputPct > 0 && outRate === null) return null;
+  if (tokens.cacheReadPct > 0 && crRate === null) return null;
+  if (!tokens.inputPct && !tokens.cacheReadPct && !tokens.outputPct) return null;
   return (inRate || 0) + (outRate || 0) + (crRate || 0);
 }
 

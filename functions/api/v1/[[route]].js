@@ -269,6 +269,32 @@ function recommendationConstraints(parsed, pricing) {
 
 // ── Pagination helper ─────────────────────────────────────────────────────────
 
+/**
+ * Sort key for the default (non-mix) provider ordering: published input+output
+ * $/M. An offering with no published price is unpriceable, not free, so it
+ * compares as Infinity and sorts last.
+ */
+function listCost(model) {
+  const { input, output } = model.pricing || {};
+  if (input == null && output == null) return Infinity;
+  return (input ?? 0) + (output ?? 0);
+}
+
+/**
+ * Resolve one image/video model by id.
+ *
+ * canonicalId strips the org prefix and recognized preview/date suffixes, so
+ * distinct media rows (e.g. `google/gemini-3-pro-image` vs the vendored
+ * `…-image-preview`) can share a canonical id. Prefer the exact id the caller
+ * named and fall back to the canonical match, so a single-record route never
+ * answers with a different model than the one requested.
+ */
+function findMediaModel(models, requestedId, canonicalTarget) {
+  const exact = String(requestedId).toLowerCase();
+  return models.find((m) => String(m.id).toLowerCase() === exact)
+    ?? models.find((m) => canonicalId(String(m.id)) === canonicalTarget);
+}
+
 function paginate(arr, params) {
   // Clamp user input: limit ∈ [1,500], offset ≥ 0. Non-numeric, zero, or negative
   // values fall back to the defaults — a negative offset would silently slice
@@ -624,11 +650,9 @@ export async function onRequestGet(context) {
         };
         sorted = matches.sort((a, b) => costFn(a) - costFn(b));
       } else {
-        sorted = matches.sort((a, b) => {
-          const costA = (a.pricing.input || 0) + (a.pricing.output || 0);
-          const costB = (b.pricing.input || 0) + (b.pricing.output || 0);
-          return costA - costB;
-        });
+        // Unknown is not free: an offering with no published price must rank
+        // after every priced one instead of comparing as $0.
+        sorted = matches.sort((a, b) => listCost(a) - listCost(b));
       }
 
       return json({
@@ -729,8 +753,11 @@ export async function onRequestGet(context) {
       else if (sortKey === 'intelligence') { va = a.benchmarks?.intelligence_index; vb = b.benchmarks?.intelligence_index; }
       else if (sortKey === 'coding') { va = a.benchmarks?.coding_index; vb = b.benchmarks?.coding_index; }
       else if (sortKey === 'agentic') { va = a.benchmarks?.agentic_index; vb = b.benchmarks?.agentic_index; }
+      else if (sortKey === 'discount') { va = a.discount; vb = b.discount; }
       else { va = a.pricing[sortKey]; vb = b.pricing[sortKey]; }
-      if (va === null || va === undefined) return 1;
+      // Nulls sort last in BOTH directions; a null/null pair compares equal so
+      // the comparator stays antisymmetric (V8 requires that for stability).
+      if (va === null || va === undefined) return vb === null || vb === undefined ? 0 : 1;
       if (vb === null || vb === undefined) return -1;
       if (va < vb) return -1 * order;
       if (va > vb) return 1 * order;
@@ -771,7 +798,7 @@ export async function onRequestGet(context) {
         return json({ error: 'Invalid model id encoding' }, 400); // malformed %-encoding
       }
       const target = canonicalId(requestedId);
-      const model = imagePricing.models.find(m => canonicalId(m.id) === target);
+      const model = findMediaModel(imagePricing.models, requestedId, target);
       if (!model) {
         return json({ error: 'Image model not found', id: subPath }, 404);
       }
@@ -847,7 +874,7 @@ export async function onRequestGet(context) {
         return json({ error: 'Invalid model id encoding' }, 400); // malformed %-encoding
       }
       const target = canonicalId(requestedId);
-      const model = videoPricing.models.find(m => canonicalId(m.id) === target);
+      const model = findMediaModel(videoPricing.models, requestedId, target);
       if (!model) {
         return json({ error: 'Video model not found', id: subPath }, 404);
       }

@@ -29,10 +29,12 @@ export function freshInputRate(pricing) {
  * Null semantics (mirrors app.js blendedCostFor):
  *  - inputPct > 0 && fresh-input tariff null → returns null (mix can't be priced)
  *  - outputPct > 0 && output price null → returns null
- *  - cache_read null → cached tokens are charged at the INPUT rate (no cache
- *    discount; the provider simply doesn't publish one)
- *  - cache_read AND input both null → the cache leg contributes $0 (never
- *    disqualifies the offering — matches app.js costFor semantics)
+ *  - cacheReadPct > 0 && cache_read AND input both null → returns null
+ *    (the leg has no price at all, so the mix can't be priced)
+ *  - cache_read null (but input priced) → cached tokens are charged at the
+ *    INPUT rate (no cache discount; the provider simply doesn't publish one)
+ *  - every share is 0 → returns null: no tokens are priced, so there is no rate
+ *  - a published $0 rate stays 0 (free is a price, not a missing one)
  *
  * Returns null when the mix can't be priced at all, otherwise USD per 1M tokens
  * (i.e. blendedCostFor's return) — NOT a per-token cost.
@@ -45,6 +47,8 @@ export function blendedRate(pricing, { inputPct, cacheReadPct, outputPct }) {
   const crRate = crPrice != null ? crPrice * cacheReadPct / 100 : null;
   if (inputPct > 0 && inRate === null) return null;
   if (outputPct > 0 && outRate === null) return null;
+  if (cacheReadPct > 0 && crRate === null) return null;
+  if (!inputPct && !cacheReadPct && !outputPct) return null;
   return (inRate || 0) + (outRate || 0) + (crRate || 0);
 }
 

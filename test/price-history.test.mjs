@@ -220,12 +220,14 @@ test('cache_read null falls back to the input price, never to zero', () => {
   assert.notEqual(blendedRateFor(row, CACHE_MIX).toFixed(6), '0.090000');
 });
 
-test('a mix leg with no price disqualifies the offering only when the mix requests it', () => {
+test('a mix leg with no price disqualifies the offering whenever the mix requests it', () => {
   const row = { input_price: null, output_price: 8, cache_read: null };
-  // The cache leg falls back to the (null) input price and contributes $0 —
-  // it never disqualifies. The input leg does, because CACHE_MIX requests 2.5%.
+  // Both the input leg and the cache leg request a share here, and neither the
+  // input nor the cache-read price is published, so the mix cannot be priced.
+  // (Formerly the cache leg contributed $0, which read as "free".)
   assert.equal(blendedRateFor(row, CACHE_MIX), null);
-  assert.equal(blendedRateFor(row, { inputPct: 0, cacheReadPct: 97, outputPct: 3 }).toFixed(6), '0.240000');
+  assert.equal(blendedRateFor(row, { inputPct: 0, cacheReadPct: 97, outputPct: 3 }), null);
+  // A mix that requests only the priced output leg still prices.
   assert.equal(blendedRateFor(row, { inputPct: 0, cacheReadPct: 0, outputPct: 100 }).toFixed(6), '8.000000');
 });
 
