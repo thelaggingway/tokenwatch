@@ -835,6 +835,90 @@ export const VIDEO_MODEL_RESPONSE_SCHEMA = {
 };
 
 /** Every component schema, keyed by the name `$ref` uses. */
+const COST_MIX_SCHEMA = {
+  type: 'object',
+  description: 'Mix used for the cost. `assumed: true` only when it came from a `use_case` preset.',
+  properties: {
+    inputPct: { type: 'number', minimum: 0, maximum: 100 },
+    cacheReadPct: { type: 'number', minimum: 0, maximum: 100 },
+    outputPct: { type: 'number', minimum: 0, maximum: 100 },
+    assumed: { type: 'boolean' },
+  },
+  required: ['inputPct', 'cacheReadPct', 'outputPct'],
+};
+
+const ESTIMATE_ROW_SCHEMA = {
+  type: 'object',
+  description: 'One provider offering. An offering that cannot be priced at the mix has null rate and cost plus a reason, and is listed last; it is never $0.',
+  properties: {
+    provider: { type: 'string' },
+    provider_display: nullableString('Display name, when known.'),
+    quantization: nullableString('Quantization label, when known.'),
+    rate_per_mtok: nullableNumber('Blended USD per million tokens at the mix.'),
+    cost_usd: nullableNumber('USD for the requested token count: rate_per_mtok × tokens / 1,000,000.'),
+    unpriceable_reason: nullableString('Why the offering has no cost; null when priced.'),
+  },
+  required: ['provider', 'provider_display', 'quantization', 'rate_per_mtok', 'cost_usd', 'unpriceable_reason'],
+};
+
+export const ESTIMATE_RESPONSE_SCHEMA = {
+  type: 'object',
+  description: 'Per-provider cost for one canonical model, cheapest first.',
+  properties: {
+    generated_at: generatedAt,
+    model: { type: 'string', description: 'Canonical id the request resolved to.' },
+    requested_model: { type: 'string' },
+    tokens: { type: 'number', exclusiveMinimum: 0 },
+    use_case: { type: 'string', description: 'Present when the mix came from a preset.' },
+    mix: { $ref: '#/components/schemas/CostMix' },
+    provider_count: { type: 'integer', minimum: 0 },
+    providers: { type: 'array', items: { $ref: '#/components/schemas/EstimateRow' } },
+  },
+  required: ['generated_at', 'model', 'requested_model', 'tokens', 'mix', 'provider_count', 'providers'],
+};
+
+const COMPARE_ROW_SCHEMA = {
+  type: 'object',
+  description: 'Cost summary for one model. Cost fields are null when no offering can be priced at the mix.',
+  properties: {
+    model: { type: 'string' },
+    requested_model: { type: 'string' },
+    provider_count: { type: 'integer', minimum: 0 },
+    unpriceable_count: { type: 'integer', minimum: 0 },
+    cheapest: {
+      type: ['object', 'null'],
+      properties: {
+        provider: { type: 'string' },
+        provider_display: nullableString('Display name, when known.'),
+        quantization: nullableString('Quantization label, when known.'),
+        rate_per_mtok: { type: 'number' },
+        cost_usd: { type: 'number' },
+      },
+    },
+    max_provider: nullableString('Most expensive priced provider.'),
+    max_cost_usd: nullableNumber('Cost at the most expensive priced provider.'),
+    spread_usd: nullableNumber('max_cost_usd minus the cheapest cost.'),
+    savings_vs_most_expensive_usd: nullableNumber('What choosing the cheapest provider saves versus the most expensive.'),
+  },
+  required: ['model', 'requested_model', 'provider_count', 'unpriceable_count', 'cheapest', 'max_provider', 'max_cost_usd', 'spread_usd', 'savings_vs_most_expensive_usd'],
+};
+
+export const COMPARE_RESPONSE_SCHEMA = {
+  type: 'object',
+  description: 'Cheapest-provider cost per model at one token count and mix.',
+  properties: {
+    generated_at: generatedAt,
+    tokens: { type: 'number', exclusiveMinimum: 0 },
+    use_case: { type: 'string', description: 'Present when the mix came from a preset.' },
+    mix: { $ref: '#/components/schemas/CostMix' },
+    request_count: { type: 'integer', minimum: 1, maximum: 20 },
+    found_count: { type: 'integer', minimum: 0 },
+    models: { type: 'array', items: { $ref: '#/components/schemas/CompareRow' } },
+    not_found: { type: 'array', items: { type: 'string' }, description: 'Requested ids that matched no model.' },
+  },
+  required: ['generated_at', 'tokens', 'mix', 'request_count', 'found_count', 'models', 'not_found'],
+};
+
 export const COMPONENT_SCHEMAS = {
   Pricing: PRICING_SCHEMA,
   ContextPriceTier: CONTEXT_PRICE_TIER_SCHEMA,
@@ -878,4 +962,9 @@ export const COMPONENT_SCHEMAS = {
   PaginatedVideoModels: PAGINATED_VIDEO_MODELS_SCHEMA,
   ImageModelResponse: IMAGE_MODEL_RESPONSE_SCHEMA,
   VideoModelResponse: VIDEO_MODEL_RESPONSE_SCHEMA,
+  CostMix: COST_MIX_SCHEMA,
+  EstimateRow: ESTIMATE_ROW_SCHEMA,
+  EstimateResponse: ESTIMATE_RESPONSE_SCHEMA,
+  CompareRow: COMPARE_ROW_SCHEMA,
+  CompareResponse: COMPARE_RESPONSE_SCHEMA,
 };

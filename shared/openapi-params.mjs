@@ -170,6 +170,25 @@ const MEDIA_SORT = {
 };
 
 /** Parameter docs keyed by the exact `API_ENDPOINTS[].path` they belong to. */
+const COST_QUERY = {
+  tokens: {
+    type: 'number',
+    minimum: 0,
+    required: true,
+    description: 'Raw token count to price (for example 1000000 for one million). Must be positive.',
+  },
+  mix: {
+    type: 'string',
+    pattern: '^\\d+(\\.\\d+)?(,\\d+(\\.\\d+)?){2}$',
+    description: 'Fresh input, cached input and output percentages summing to 100. Required unless `use_case` is given; the two are mutually exclusive.',
+  },
+  use_case: {
+    type: 'string',
+    enumFrom: 'use_case',
+    description: 'Take the mix from this workload preset instead of `mix`. The response marks the mix `assumed: true`.',
+  },
+};
+
 export const PARAMETER_DOCS = {
   '/api/v1/': {},
   '/api/v1/use-cases': {},
@@ -240,6 +259,22 @@ export const PARAMETER_DOCS = {
       pattern: '^\\d+(\\.\\d+)?(,\\d+(\\.\\d+)?){2}$',
       description: 'Three percentages (fresh input, cached input, output) summing to 100 ±0.5, blended at read time against the stored raw tariffs. Malformed mixes return 400. Defaults to the agentic mix 2.5, 97, 0.5.',
     },
+  },
+  '/api/v1/estimate': {
+    model: {
+      type: 'string',
+      required: true,
+      description: 'Canonical or org/model id.',
+    },
+    ...COST_QUERY,
+  },
+  '/api/v1/compare': {
+    models: {
+      type: 'string',
+      required: true,
+      description: 'Comma-separated canonical or org/model ids, at most 20 after de-duplication. Unknown ids are reported in `not_found` rather than failing the request.',
+    },
+    ...COST_QUERY,
   },
   '/api/v1/images': {
     ...MEDIA_FILTERS,
@@ -317,6 +352,14 @@ export const RESPONSE_DOCS = {
   '/api/v1/models/:canonicalId/history': {
     schema: 'HistoryResponse',
     description: 'At most 90 chronological daily cheapest-provider points, with every priceable offering per day in `series`. Days nothing can be priced are omitted, never zero.',
+  },
+  '/api/v1/estimate': {
+    schema: 'EstimateResponse',
+    description: 'Every offering of one canonical model with its blended rate and cost, cheapest first. Unpriceable offerings are last with null cost and a reason.',
+  },
+  '/api/v1/compare': {
+    schema: 'CompareResponse',
+    description: 'Cheapest provider, most expensive provider, spread and savings per requested model. Unknown ids are listed in `not_found`.',
   },
   '/api/v1/images': {
     schema: 'PaginatedImageModels',

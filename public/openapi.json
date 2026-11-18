@@ -834,6 +834,206 @@
         }
       }
     },
+    "/api/v1/estimate": {
+      "get": {
+        "summary": "Per-provider cost for a model at a token count and mix, cheapest first",
+        "description": "Returns { provider, provider_display, quantization, rate_per_mtok, cost_usd } for every offering of one canonical model, sorted cheapest first. Offerings that cannot be priced at the requested mix return cost_usd: null with an unpriceable_reason and are listed last — never $0. Supply either mix=inputPct,cacheReadPct,outputPct or use_case=<preset id>.",
+        "operationId": "getApiV1Estimate",
+        "parameters": [
+          {
+            "name": "model",
+            "in": "query",
+            "required": true,
+            "description": "Canonical or org/model id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tokens",
+            "in": "query",
+            "required": true,
+            "description": "Raw token count to price (for example 1000000 for one million). Must be positive.",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "mix",
+            "in": "query",
+            "required": false,
+            "description": "Fresh input, cached input and output percentages summing to 100. Required unless `use_case` is given; the two are mutually exclusive.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+(\\.\\d+)?(,\\d+(\\.\\d+)?){2}$"
+            }
+          },
+          {
+            "name": "use_case",
+            "in": "query",
+            "required": false,
+            "description": "Take the mix from this workload preset instead of `mix`. The response marks the mix `assumed: true`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "agentic-coding",
+                "tool-agents",
+                "long-context-rag",
+                "structured-extraction",
+                "high-volume-cheap",
+                "chat-assistant",
+                "creative-writing",
+                "reasoning-math",
+                "frontend-ui"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Every offering of one canonical model with its blended rate and cost, cheapest first. Unpriceable offerings are last with null cost and a reason.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameter, malformed model ID encoding, or an out-of-range value the route validates strictly.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown API route, or a model id that does not resolve in the catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A required catalog asset or the price-history database is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compare": {
+      "get": {
+        "summary": "Compare cheapest per-provider cost across up to 20 models",
+        "description": "Returns per model the cheapest provider and cost, the most expensive provider cost, the spread, and the savings versus the most expensive option. Unknown ids are reported in a not_found array instead of failing the whole request.",
+        "operationId": "getApiV1Compare",
+        "parameters": [
+          {
+            "name": "models",
+            "in": "query",
+            "required": true,
+            "description": "Comma-separated canonical or org/model ids, at most 20 after de-duplication. Unknown ids are reported in `not_found` rather than failing the request.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tokens",
+            "in": "query",
+            "required": true,
+            "description": "Raw token count to price (for example 1000000 for one million). Must be positive.",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "mix",
+            "in": "query",
+            "required": false,
+            "description": "Fresh input, cached input and output percentages summing to 100. Required unless `use_case` is given; the two are mutually exclusive.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+(\\.\\d+)?(,\\d+(\\.\\d+)?){2}$"
+            }
+          },
+          {
+            "name": "use_case",
+            "in": "query",
+            "required": false,
+            "description": "Take the mix from this workload preset instead of `mix`. The response marks the mix `assumed: true`.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "agentic-coding",
+                "tool-agents",
+                "long-context-rag",
+                "structured-extraction",
+                "high-volume-cheap",
+                "chat-assistant",
+                "creative-writing",
+                "reasoning-math",
+                "frontend-ui"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cheapest provider, most expensive provider, spread and savings per requested model. Unknown ids are listed in `not_found`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompareResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameter, malformed model ID encoding, or an out-of-range value the route validates strictly.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown API route, or a model id that does not resolve in the catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A required catalog asset or the price-history database is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/stats": {
       "get": {
         "summary": "Return catalog, provider, organization, privacy, cache, and quantization counts",
@@ -3787,6 +3987,278 @@
         "required": [
           "generated_at",
           "model"
+        ]
+      },
+      "CostMix": {
+        "type": "object",
+        "description": "Mix used for the cost. `assumed: true` only when it came from a `use_case` preset.",
+        "properties": {
+          "inputPct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "cacheReadPct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "outputPct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "assumed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "inputPct",
+          "cacheReadPct",
+          "outputPct"
+        ]
+      },
+      "EstimateRow": {
+        "type": "object",
+        "description": "One provider offering. An offering that cannot be priced at the mix has null rate and cost plus a reason, and is listed last; it is never $0.",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "provider_display": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name, when known."
+          },
+          "quantization": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Quantization label, when known."
+          },
+          "rate_per_mtok": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Blended USD per million tokens at the mix."
+          },
+          "cost_usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "USD for the requested token count: rate_per_mtok × tokens / 1,000,000."
+          },
+          "unpriceable_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the offering has no cost; null when priced."
+          }
+        },
+        "required": [
+          "provider",
+          "provider_display",
+          "quantization",
+          "rate_per_mtok",
+          "cost_usd",
+          "unpriceable_reason"
+        ]
+      },
+      "EstimateResponse": {
+        "type": "object",
+        "description": "Per-provider cost for one canonical model, cheapest first.",
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Generation timestamp of the source catalog this response was served from."
+          },
+          "model": {
+            "type": "string",
+            "description": "Canonical id the request resolved to."
+          },
+          "requested_model": {
+            "type": "string"
+          },
+          "tokens": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "use_case": {
+            "type": "string",
+            "description": "Present when the mix came from a preset."
+          },
+          "mix": {
+            "$ref": "#/components/schemas/CostMix"
+          },
+          "provider_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EstimateRow"
+            }
+          }
+        },
+        "required": [
+          "generated_at",
+          "model",
+          "requested_model",
+          "tokens",
+          "mix",
+          "provider_count",
+          "providers"
+        ]
+      },
+      "CompareRow": {
+        "type": "object",
+        "description": "Cost summary for one model. Cost fields are null when no offering can be priced at the mix.",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "requested_model": {
+            "type": "string"
+          },
+          "provider_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unpriceable_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cheapest": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "provider_display": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Display name, when known."
+              },
+              "quantization": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Quantization label, when known."
+              },
+              "rate_per_mtok": {
+                "type": "number"
+              },
+              "cost_usd": {
+                "type": "number"
+              }
+            }
+          },
+          "max_provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Most expensive priced provider."
+          },
+          "max_cost_usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Cost at the most expensive priced provider."
+          },
+          "spread_usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "max_cost_usd minus the cheapest cost."
+          },
+          "savings_vs_most_expensive_usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "What choosing the cheapest provider saves versus the most expensive."
+          }
+        },
+        "required": [
+          "model",
+          "requested_model",
+          "provider_count",
+          "unpriceable_count",
+          "cheapest",
+          "max_provider",
+          "max_cost_usd",
+          "spread_usd",
+          "savings_vs_most_expensive_usd"
+        ]
+      },
+      "CompareResponse": {
+        "type": "object",
+        "description": "Cheapest-provider cost per model at one token count and mix.",
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Generation timestamp of the source catalog this response was served from."
+          },
+          "tokens": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "use_case": {
+            "type": "string",
+            "description": "Present when the mix came from a preset."
+          },
+          "mix": {
+            "$ref": "#/components/schemas/CostMix"
+          },
+          "request_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "found_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompareRow"
+            }
+          },
+          "not_found": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Requested ids that matched no model."
+          }
+        },
+        "required": [
+          "generated_at",
+          "tokens",
+          "mix",
+          "request_count",
+          "found_count",
+          "models",
+          "not_found"
         ]
       }
     }
