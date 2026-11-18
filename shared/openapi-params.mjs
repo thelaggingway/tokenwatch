@@ -1,11 +1,9 @@
 // Per-parameter OpenAPI documentation for /api/v1, keyed by the registry path.
 //
 // Every entry describes what the router in functions/api/v1/[[route]].js
-// actually does today, including where it is permissive: unparseable values
-// fall back to defaults instead of returning 400 on the list routes, and
-// `/models/:id/providers` accepts an unvalidated `mix` while `/history`
-// validates it. Documenting the real behaviour keeps the spec honest; fixing
-// it belongs to the router, not here.
+// actually does. Malformed values are a 400 `invalid_parameter` naming the
+// parameter; the only deliberate leniencies are case-insensitive `order` and a
+// `limit` above 500 clamping to 500.
 //
 // Shape per parameter:
 //   type      'string' | 'integer' | 'number' | 'boolean'
@@ -22,13 +20,13 @@ const PAGINATION = {
     minimum: 1,
     maximum: 500,
     default: 100,
-    description: 'Page size. Clamped to at most 500; 0, negative or non-numeric values fall back to 100 instead of erroring.',
+    description: 'Page size, a positive integer. Values above 500 are clamped to 500 and the response `limit` reports the applied value; 0, negative, fractional or non-numeric values are a 400.',
   },
   offset: {
     type: 'integer',
     minimum: 0,
     default: 0,
-    description: 'Zero-based index of the first row. Negative or non-numeric values fall back to 0. An offset past the end returns an empty page with an honest `total`.',
+    description: 'Zero-based index of the first row, a non-negative integer; anything else is a 400. An offset past the end returns an empty page with an honest `total`.',
   },
 };
 
@@ -36,14 +34,14 @@ const TEXT_SORT = {
   type: 'string',
   enum: ['id', 'input', 'output', 'cache_read', 'cache_write', 'context', 'max_output', 'uptime', 'discount', 'intelligence', 'coding', 'agentic'],
   default: 'id',
-  description: 'Sort key. Prices are USD per million tokens; `context`, `max_output` and `uptime` are offering metrics; `intelligence`, `coding` and `agentic` are benchmark indices. Unknown keys silently fall back to `id`.',
+  description: 'Sort key. Prices are USD per million tokens; `context`, `max_output` and `uptime` are offering metrics; `intelligence`, `coding` and `agentic` are benchmark indices. Null values sort last in both directions. An unknown key is a 400 listing the valid keys.',
 };
 
 const ORDER = {
   type: 'string',
   enum: ['asc', 'desc'],
   default: 'asc',
-  description: 'Sort direction. Only the exact lowercase value `desc` reverses the order; anything else sorts ascending.',
+  description: 'Sort direction, case-insensitive (`DESC` works). Any other value is a 400.',
 };
 
 const TEXT_FILTERS = {
@@ -68,7 +66,7 @@ const TEXT_FILTERS = {
   min_intelligence: {
     type: 'number',
     minimum: 0,
-    description: 'Keep offerings whose benchmark `intelligence_index` is at least this value. Unbenchmarked offerings are excluded; values <= 0 or non-numeric are ignored.',
+    description: 'Keep offerings whose benchmark `intelligence_index` is at least this value (decimals allowed, e.g. `45.5`). Unbenchmarked offerings are excluded; `0` disables the filter. Negative or non-numeric values are a 400.',
   },
   quantization: {
     type: 'string',
@@ -100,7 +98,7 @@ const TEXT_FILTERS = {
   },
   benchmarked: {
     type: 'boolean',
-    description: 'When `true`, keep only offerings carrying a benchmark sidecar. Any other value, including `yes`, is ignored.',
+    description: 'When `true`, keep only offerings carrying a benchmark sidecar.',
   },
   search: {
     type: 'string',
@@ -130,7 +128,7 @@ const RECOMMENDATION_COMMON = {
   exclude_hq: {
     type: 'string',
     pattern: '^[A-Za-z]{2}(,[A-Za-z]{2})*$',
-    description: 'Comma-separated two-letter headquarters country codes to exclude. Providers with unknown headquarters are kept, not excluded. The code is not checked against a country list.',
+    description: 'Comma-separated ISO 3166-1 alpha-2 headquarters country codes to exclude. Providers with unknown headquarters are kept, not excluded. A code that is not a real country code is a 400.',
   },
   include_proprietary: {
     type: 'boolean',
@@ -168,7 +166,7 @@ const MEDIA_SORT = {
   type: 'string',
   enum: ['id', 'org', 'provider'],
   default: 'id',
-  description: 'Sort key, compared case-insensitively. Unknown keys fall back to `id`.',
+  description: 'Sort key, compared case-insensitively. An unknown key is a 400 listing the valid keys.',
 };
 
 /** Parameter docs keyed by the exact `API_ENDPOINTS[].path` they belong to. */
@@ -180,7 +178,7 @@ export const PARAMETER_DOCS = {
   '/api/v1/providers': {
     zdr: {
       type: 'boolean',
-      description: 'When `true`, keep only providers whose metadata says `retains_prompts: false`. Any value other than the literal `true` returns the unfiltered list.',
+      description: 'When `true`, keep only providers whose metadata says `retains_prompts: false`.',
     },
   },
   '/api/v1/recommend': {
@@ -222,11 +220,11 @@ export const PARAMETER_DOCS = {
     tokens: {
       type: 'number',
       minimum: 0,
-      description: 'Token count used to rank by total cost at the given `mix`. Only a positive value together with `mix` switches to mix-aware ordering; otherwise rows sort by `input + output`.',
+      description: 'Positive token count. It scales the cost figure only and never changes the order; zero, negative or non-numeric values are a 400.',
     },
     mix: {
       type: 'string',
-      description: 'Comma-separated input, cached-input, output percentages used to blend each offering\'s rates. Unlike `/history`, a malformed or all-zero mix is accepted and silently re-sorts by catalog order instead of returning 400.',
+      description: 'Comma-separated input, cached-input, output percentages used to blend each offering\'s rates. Must sum to 100, validated like `/history`. When present, offerings sort by the blended rate at this mix with unpriceable offerings last; `tokens` is not required. Without it, offerings sort by `input + output`, unpriced offerings last.',
     },
   },
   '/api/v1/models/:canonicalId/history': {

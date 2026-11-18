@@ -559,17 +559,20 @@ export const RECOMMEND_PROVIDERS_RESPONSE_SCHEMA = {
 
 export const ERROR_SCHEMA = {
   type: 'object',
-  description: 'Error envelope. `parameter` names the rejected query parameter on validation failures; `detail` explains an upstream or asset failure.',
+  description: 'Error envelope. `error` is always a human-readable string; `code` is a stable machine-readable value; `parameter` names the rejected query parameter on validation failures.',
   properties: {
     error: { type: 'string', description: 'Human-readable message.' },
     parameter: { type: 'string', description: 'Query parameter that failed validation.' },
-    code: { type: 'string', description: 'Stable machine-readable code when one is assigned.' },
-    detail: { type: 'string', description: 'Underlying failure detail for 503 responses.' },
-    path: { type: 'string', description: 'Unmatched path fragment for 404 responses.' },
+    code: {
+      type: 'string',
+      enum: ['invalid_parameter', 'model_not_found', 'not_found', 'catalog_unavailable', 'history_unavailable', 'recommendation_data_unavailable'],
+      description: 'Stable machine-readable error code.',
+    },
+    detail: { type: 'string', description: 'Fixed configuration hint on some 503 responses. Never contains internal error text.' },
     canonical_id: { type: 'string', description: 'Looked-up id echoed on model 404 responses.' },
     id: { type: 'string', description: 'Looked-up id echoed on image/video 404 responses.' },
   },
-  required: ['error'],
+  required: ['error', 'code'],
 };
 
 export const PAGINATED_MODELS_SCHEMA = {
