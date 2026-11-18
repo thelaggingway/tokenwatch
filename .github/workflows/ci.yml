@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - main
+      # Stacked PR series are based on the previous segment rather than main,
+      # so without this pattern only the bottom PR would ever be verified.
+      - 'api/**'
 
 permissions:
   contents: read
