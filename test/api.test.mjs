@@ -681,13 +681,12 @@ test('?sort=output&order=desc orders descending', async () => {
   }
 });
 
-test('?sort=<invalid> silently falls back to id (documented behavior)', async () => {
-  const { body } = await getJson(makeContext('/api/v1/models', '?sort=price'));
-  // Invalid sort → falls back to 'id' (alphabetical) — no error, HTTP 200
-  // This documents the silent-fallback behavior noted in the issue analysis.
-  const ids = body.models.map(m => m.id);
-  const sorted = [...ids].sort();
-  assert.deepEqual(ids, sorted);
+test('?sort=<invalid> is a 400 that names the valid keys', async () => {
+  const { status, body } = await getJson(makeContext('/api/v1/models', '?sort=price'));
+  assert.equal(status, 400);
+  assert.equal(body.code, 'invalid_parameter');
+  assert.equal(body.parameter, 'sort');
+  assert.equal(typeof body.error, 'string', 'error stays a string for WebMCP/widget readers');
 });
 
 test('?sort=intelligence orders by benchmark index desc (nulls last)', async () => {
@@ -731,25 +730,15 @@ test('?limit=2&offset=2 returns the next page', async () => {
   for (const m of page2) assert.ok(!page1Ids.has(m.id), 'no overlap between pages');
 });
 
-test('?limit=-5 clamps to the default (negative limit must not drop trailing rows)', async () => {
-  const { body } = await getJson(makeContext('/api/v1/models', '?limit=-5'));
-  assert.equal(body.limit, 100); // invalid → default
-  assert.equal(body.models.length, 5); // fixture has 5; a negative slice would have returned 0
-});
-
-test('?limit=0 and ?limit=abc fall back to the default limit', async () => {
-  for (const raw of ['0', 'abc']) {
-    const { body } = await getJson(makeContext('/api/v1/models', `?limit=${raw}`));
-    assert.equal(body.limit, 100, `limit=${raw} should default to 100`);
+test('invalid limit and offset are 400s instead of silently returning a different page', async () => {
+  for (const raw of ['-5', '0', 'abc']) {
+    const { status, body } = await getJson(makeContext('/api/v1/models', `?limit=${raw}`));
+    assert.equal(status, 400, `limit=${raw}`);
+    assert.equal(body.parameter, 'limit');
   }
-});
-
-test('?limit=2&offset=-1 clamps offset to 0 (negative offset must not slice from the end)', async () => {
-  const clamped = (await getJson(makeContext('/api/v1/models', '?limit=2&offset=-1'))).body;
-  const normal = (await getJson(makeContext('/api/v1/models', '?limit=2&offset=0'))).body;
-  assert.equal(clamped.offset, 0);
-  assert.deepEqual(clamped.models.map(m => m.id), normal.models.map(m => m.id),
-    'offset=-1 must behave like offset=0, not return the last page');
+  const { status, body } = await getJson(makeContext('/api/v1/models', '?offset=-1'));
+  assert.equal(status, 400);
+  assert.equal(body.parameter, 'offset');
 });
 
 test('?min_context=500000 filters by context length', async () => {
