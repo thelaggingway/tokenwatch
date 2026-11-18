@@ -44,6 +44,18 @@ const ORDER = {
   description: 'Sort direction, case-insensitive (`DESC` works). Any other value is a 400.',
 };
 
+/**
+ * JSON indentation. Every data route returns compact JSON by default and
+ * accepts `pretty=1`/`pretty=true` to indent it, so one definition is reused
+ * instead of restated per route.
+ */
+const PRETTY = {
+  type: 'string',
+  enum: ['1', '0', 'true', 'false'],
+  default: '0',
+  description: 'When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.',
+};
+
 const TEXT_FILTERS = {
   org: {
     type: 'string',
@@ -190,15 +202,16 @@ const COST_QUERY = {
 };
 
 export const PARAMETER_DOCS = {
-  '/api/v1/': {},
-  '/api/v1/use-cases': {},
-  '/api/v1/stats': {},
-  '/api/v1/orgs': {},
+  '/api/v1/': { pretty: PRETTY },
+  '/api/v1/use-cases': { pretty: PRETTY },
+  '/api/v1/stats': { pretty: PRETTY },
+  '/api/v1/orgs': { pretty: PRETTY },
   '/api/v1/providers': {
     zdr: {
       type: 'boolean',
       description: 'When `true`, keep only providers whose metadata says `retains_prompts: false`.',
     },
+    pretty: PRETTY,
   },
   '/api/v1/recommend': {
     use_case: RECOMMENDATION_COMMON.use_case,
@@ -234,6 +247,7 @@ export const PARAMETER_DOCS = {
     order: ORDER,
     limit: PAGINATION.limit,
     offset: PAGINATION.offset,
+    pretty: PRETTY,
   },
   '/api/v1/models/:canonicalId/providers': {
     tokens: {
@@ -245,6 +259,7 @@ export const PARAMETER_DOCS = {
       type: 'string',
       description: 'Comma-separated input, cached-input, output percentages used to blend each offering\'s rates. Must sum to 100, validated like `/history`. When present, offerings sort by the blended rate at this mix with unpriceable offerings last; `tokens` is not required. Without it, offerings sort by `input + output`, unpriced offerings last.',
     },
+    pretty: PRETTY,
   },
   '/api/v1/models/:canonicalId/history': {
     days: {
@@ -259,6 +274,7 @@ export const PARAMETER_DOCS = {
       pattern: '^\\d+(\\.\\d+)?(,\\d+(\\.\\d+)?){2}$',
       description: 'Three percentages (fresh input, cached input, output) summing to 100 ±0.5, blended at read time against the stored raw tariffs. Malformed mixes return 400. Defaults to the agentic mix 2.5, 97, 0.5.',
     },
+    pretty: PRETTY,
   },
   '/api/v1/estimate': {
     model: {
@@ -267,6 +283,7 @@ export const PARAMETER_DOCS = {
       description: 'Canonical or org/model id.',
     },
     ...COST_QUERY,
+    pretty: PRETTY,
   },
   '/api/v1/compare': {
     models: {
@@ -275,6 +292,7 @@ export const PARAMETER_DOCS = {
       description: 'Comma-separated canonical or org/model ids, at most 20 after de-duplication. Unknown ids are reported in `not_found` rather than failing the request.',
     },
     ...COST_QUERY,
+    pretty: PRETTY,
   },
   '/api/v1/images': {
     ...MEDIA_FILTERS,
@@ -282,6 +300,7 @@ export const PARAMETER_DOCS = {
     order: ORDER,
     limit: PAGINATION.limit,
     offset: PAGINATION.offset,
+    pretty: PRETTY,
   },
   '/api/v1/images/:id': {},
   '/api/v1/videos': {
@@ -290,6 +309,7 @@ export const PARAMETER_DOCS = {
     order: ORDER,
     limit: PAGINATION.limit,
     offset: PAGINATION.offset,
+    pretty: PRETTY,
   },
   '/api/v1/videos/:id': {},
 };

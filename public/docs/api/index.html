@@ -50,24 +50,32 @@
         <li><code>include_proprietary=true</code>: also consider models not confirmed open-weight.</li>
         <li><code>detail</code>: <code>compact</code> (default) or <code>full</code>; <code>limit</code>: rows per group, 1–100 (default 10); <code>pretty=1</code>: indented JSON.</li>
       </ul>
-      <div class="table-wrap"><table><caption>TokenWatch API endpoints</caption><thead><tr><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col">Query parameters</th><th scope="col">Sort values</th></tr></thead><tbody><tr><td><code>/api/v1/</code></td><td>API metadata and endpoint directory</td><td>—</td><td>—</td></tr>
-<tr><td><code>/api/v1/use-cases</code></td><td>List workload recommendation presets and their assumed mixes, weights, requirements, and quality floors</td><td>—</td><td>—</td></tr>
+      <div class="table-wrap"><table><caption>TokenWatch API endpoints</caption><thead><tr><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col">Query parameters</th><th scope="col">Sort values</th></tr></thead><tbody><tr><td><code>/api/v1/</code></td><td>API metadata and endpoint directory</td><td><code>pretty</code></td><td>—</td></tr>
+<tr><td><code>/api/v1/use-cases</code></td><td>List workload recommendation presets and their assumed mixes, weights, requirements, and quality floors</td><td><code>pretty</code></td><td>—</td></tr>
 <tr><td><code>/api/v1/recommend</code></td><td>Recommend models for a workload; chat and creative-writing also return an Arena preference favorite with source metadata</td><td><code>use_case</code>, <code>priority</code>, <code>zdr</code>, <code>exclude_hq</code>, <code>include_proprietary</code>, <code>detail</code>, <code>limit</code>, <code>pretty</code></td><td>—</td></tr>
 <tr><td><code>/api/v1/recommend/providers</code></td><td>Rank providers for one model with full explanations for the top three and compact remaining rows</td><td><code>use_case</code>, <code>model</code>, <code>priority</code>, <code>zdr</code>, <code>exclude_hq</code>, <code>include_proprietary</code>, <code>detail</code>, <code>limit</code>, <code>pretty</code></td><td>—</td></tr>
-<tr><td><code>/api/v1/models</code></td><td>List text-generation model offerings</td><td><code>org</code>, <code>provider</code>, <code>min_context</code>, <code>min_output</code>, <code>min_intelligence</code>, <code>quantization</code>, <code>open_weights</code>, <code>cache_read</code>, <code>cache_write</code>, <code>promo</code>, <code>zdr</code>, <code>sub</code>, <code>benchmarked</code>, <code>search</code>, <code>sort</code>, <code>order</code>, <code>limit</code>, <code>offset</code></td><td><code>id</code>, <code>input</code>, <code>output</code>, <code>cache_read</code>, <code>cache_write</code>, <code>context</code>, <code>max_output</code>, <code>uptime</code>, <code>discount</code>, <code>intelligence</code>, <code>coding</code>, <code>agentic</code></td></tr>
-<tr><td><code>/api/v1/models/:canonicalId/providers</code></td><td>List providers for one canonical model, ordered by cost</td><td><code>tokens</code>, <code>mix</code></td><td>—</td></tr>
-<tr><td><code>/api/v1/models/:canonicalId/history</code></td><td>Daily cheapest-provider price history, blended at read time</td><td><code>days</code>, <code>mix</code></td><td>—</td></tr>
-<tr><td><code>/api/v1/estimate</code></td><td>Per-provider cost for a model at a token count and mix, cheapest first</td><td><code>model</code>, <code>tokens</code>, <code>mix</code>, <code>use_case</code></td><td>—</td></tr>
-<tr><td><code>/api/v1/compare</code></td><td>Compare cheapest per-provider cost across up to 20 models</td><td><code>models</code>, <code>tokens</code>, <code>mix</code>, <code>use_case</code></td><td>—</td></tr>
-<tr><td><code>/api/v1/stats</code></td><td>Return catalog, provider, organization, privacy, cache, and quantization counts</td><td>—</td><td>—</td></tr>
-<tr><td><code>/api/v1/orgs</code></td><td>List model organizations with offering counts</td><td>—</td><td>—</td></tr>
-<tr><td><code>/api/v1/providers</code></td><td>List provider metadata and policy fields</td><td><code>zdr</code></td><td>—</td></tr>
-<tr><td><code>/api/v1/images</code></td><td>List image-generation models</td><td><code>org</code>, <code>provider</code>, <code>search</code>, <code>sort</code>, <code>order</code>, <code>limit</code>, <code>offset</code></td><td><code>id</code>, <code>org</code>, <code>provider</code></td></tr>
+<tr><td><code>/api/v1/models</code></td><td>List text-generation model offerings</td><td><code>org</code>, <code>provider</code>, <code>min_context</code>, <code>min_output</code>, <code>min_intelligence</code>, <code>quantization</code>, <code>open_weights</code>, <code>cache_read</code>, <code>cache_write</code>, <code>promo</code>, <code>zdr</code>, <code>sub</code>, <code>benchmarked</code>, <code>search</code>, <code>sort</code>, <code>order</code>, <code>limit</code>, <code>offset</code>, <code>pretty</code></td><td><code>id</code>, <code>input</code>, <code>output</code>, <code>cache_read</code>, <code>cache_write</code>, <code>context</code>, <code>max_output</code>, <code>uptime</code>, <code>discount</code>, <code>intelligence</code>, <code>coding</code>, <code>agentic</code></td></tr>
+<tr><td><code>/api/v1/models/:canonicalId/providers</code></td><td>List providers for one canonical model, ordered by cost</td><td><code>tokens</code>, <code>mix</code>, <code>pretty</code></td><td>—</td></tr>
+<tr><td><code>/api/v1/models/:canonicalId/history</code></td><td>Daily cheapest-provider price history, blended at read time</td><td><code>days</code>, <code>mix</code>, <code>pretty</code></td><td>—</td></tr>
+<tr><td><code>/api/v1/estimate</code></td><td>Per-provider cost for a model at a token count and mix, cheapest first</td><td><code>model</code>, <code>tokens</code>, <code>mix</code>, <code>use_case</code>, <code>pretty</code></td><td>—</td></tr>
+<tr><td><code>/api/v1/compare</code></td><td>Compare cheapest per-provider cost across up to 20 models</td><td><code>models</code>, <code>tokens</code>, <code>mix</code>, <code>use_case</code>, <code>pretty</code></td><td>—</td></tr>
+<tr><td><code>/api/v1/stats</code></td><td>Return catalog, provider, organization, privacy, cache, and quantization counts</td><td><code>pretty</code></td><td>—</td></tr>
+<tr><td><code>/api/v1/orgs</code></td><td>List model organizations with offering counts</td><td><code>pretty</code></td><td>—</td></tr>
+<tr><td><code>/api/v1/providers</code></td><td>List provider metadata and policy fields</td><td><code>zdr</code>, <code>pretty</code></td><td>—</td></tr>
+<tr><td><code>/api/v1/images</code></td><td>List image-generation models</td><td><code>org</code>, <code>provider</code>, <code>search</code>, <code>sort</code>, <code>order</code>, <code>limit</code>, <code>offset</code>, <code>pretty</code></td><td><code>id</code>, <code>org</code>, <code>provider</code></td></tr>
 <tr><td><code>/api/v1/images/:id</code></td><td>Return one image model with its pricing variants</td><td>—</td><td>—</td></tr>
-<tr><td><code>/api/v1/videos</code></td><td>List video-generation models</td><td><code>org</code>, <code>provider</code>, <code>search</code>, <code>sort</code>, <code>order</code>, <code>limit</code>, <code>offset</code></td><td><code>id</code>, <code>org</code>, <code>provider</code></td></tr>
+<tr><td><code>/api/v1/videos</code></td><td>List video-generation models</td><td><code>org</code>, <code>provider</code>, <code>search</code>, <code>sort</code>, <code>order</code>, <code>limit</code>, <code>offset</code>, <code>pretty</code></td><td><code>id</code>, <code>org</code>, <code>provider</code></td></tr>
 <tr><td><code>/api/v1/videos/:id</code></td><td>Return one video model with its pricing variants</td><td>—</td><td>—</td></tr></tbody></table></div>
       <h2 id="parameter-reference">Parameter reference</h2>
       <p>Every parameter below is documented with its type, default and the behaviour you should expect, including the cases where a value is accepted but has no effect. Prices in responses are USD per million tokens, and an unknown price or timestamp is <code>null</code> — never <code>0</code> and never "free". The same descriptions are published as JSON Schemas and parameter objects in the <a href="/openapi.json">OpenAPI 3.1 document</a>, including <code>components.schemas</code> for model rows, provider offerings, price history, recommendations and errors.</p>
+        <h3><code>/api/v1/</code></h3>
+        <ul>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
+        </ul>
+        <h3><code>/api/v1/use-cases</code></h3>
+        <ul>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
+        </ul>
         <h3><code>/api/v1/recommend</code></h3>
         <ul>
           <li><code>use_case</code> <strong>(required)</strong> <em>string</em> — Workload preset id. See <code>/api/v1/use-cases</code> for each preset's assumed mix, weights, requirements and quality floor.</li>
@@ -111,16 +119,19 @@
           <li><code>order</code> <em>string, default asc</em> (<code>asc</code>, <code>desc</code>) — Sort direction, case-insensitive (<code>DESC</code> works). Any other value is a 400.</li>
           <li><code>limit</code> <em>integer, default 100</em> — Page size, a positive integer. Values above 500 are clamped to 500 and the response <code>limit</code> reports the applied value; 0, negative, fractional or non-numeric values are a 400.</li>
           <li><code>offset</code> <em>integer, default 0</em> — Zero-based index of the first row, a non-negative integer; anything else is a 400. An offset past the end returns an empty page with an honest <code>total</code>.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
         </ul>
         <h3><code>/api/v1/models/:canonicalId/providers</code></h3>
         <ul>
           <li><code>tokens</code> <em>number</em> — Positive token count. It scales the cost figure only and never changes the order; zero, negative or non-numeric values are a 400.</li>
           <li><code>mix</code> <em>string</em> — Comma-separated input, cached-input, output percentages used to blend each offering's rates. Must sum to 100, validated like <code>/history</code>. When present, offerings sort by the blended rate at this mix with unpriceable offerings last; <code>tokens</code> is not required. Without it, offerings sort by <code>input + output</code>, unpriced offerings last.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
         </ul>
         <h3><code>/api/v1/models/:canonicalId/history</code></h3>
         <ul>
           <li><code>days</code> <em>integer, default 90</em> — Window length in days, today inclusive. Values outside 1-90 or non-numeric return 400.</li>
           <li><code>mix</code> <em>string</em> — Three percentages (fresh input, cached input, output) summing to 100 ±0.5, blended at read time against the stored raw tariffs. Malformed mixes return 400. Defaults to the agentic mix 2.5, 97, 0.5.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
         </ul>
         <h3><code>/api/v1/estimate</code></h3>
         <ul>
@@ -128,6 +139,7 @@
           <li><code>tokens</code> <strong>(required)</strong> <em>number</em> — Raw token count to price (for example 1000000 for one million). Must be positive.</li>
           <li><code>mix</code> <em>string</em> — Fresh input, cached input and output percentages summing to 100. Required unless <code>use_case</code> is given; the two are mutually exclusive.</li>
           <li><code>use_case</code> <em>string</em> — Take the mix from this workload preset instead of <code>mix</code>. The response marks the mix <code>assumed: true</code>.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
         </ul>
         <h3><code>/api/v1/compare</code></h3>
         <ul>
@@ -135,10 +147,20 @@
           <li><code>tokens</code> <strong>(required)</strong> <em>number</em> — Raw token count to price (for example 1000000 for one million). Must be positive.</li>
           <li><code>mix</code> <em>string</em> — Fresh input, cached input and output percentages summing to 100. Required unless <code>use_case</code> is given; the two are mutually exclusive.</li>
           <li><code>use_case</code> <em>string</em> — Take the mix from this workload preset instead of <code>mix</code>. The response marks the mix <code>assumed: true</code>.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
+        </ul>
+        <h3><code>/api/v1/stats</code></h3>
+        <ul>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
+        </ul>
+        <h3><code>/api/v1/orgs</code></h3>
+        <ul>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
         </ul>
         <h3><code>/api/v1/providers</code></h3>
         <ul>
           <li><code>zdr</code> <em>boolean</em> — When <code>true</code>, keep only providers whose metadata says <code>retains_prompts: false</code>.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
         </ul>
         <h3><code>/api/v1/images</code></h3>
         <ul>
@@ -149,6 +171,7 @@
           <li><code>order</code> <em>string, default asc</em> (<code>asc</code>, <code>desc</code>) — Sort direction, case-insensitive (<code>DESC</code> works). Any other value is a 400.</li>
           <li><code>limit</code> <em>integer, default 100</em> — Page size, a positive integer. Values above 500 are clamped to 500 and the response <code>limit</code> reports the applied value; 0, negative, fractional or non-numeric values are a 400.</li>
           <li><code>offset</code> <em>integer, default 0</em> — Zero-based index of the first row, a non-negative integer; anything else is a 400. An offset past the end returns an empty page with an honest <code>total</code>.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
         </ul>
         <h3><code>/api/v1/videos</code></h3>
         <ul>
@@ -159,6 +182,7 @@
           <li><code>order</code> <em>string, default asc</em> (<code>asc</code>, <code>desc</code>) — Sort direction, case-insensitive (<code>DESC</code> works). Any other value is a 400.</li>
           <li><code>limit</code> <em>integer, default 100</em> — Page size, a positive integer. Values above 500 are clamped to 500 and the response <code>limit</code> reports the applied value; 0, negative, fractional or non-numeric values are a 400.</li>
           <li><code>offset</code> <em>integer, default 0</em> — Zero-based index of the first row, a non-negative integer; anything else is a 400. An offset past the end returns an empty page with an honest <code>total</code>.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.</li>
         </ul>
       <h2>Examples</h2>
       <pre><code>curl 'https://tokenwatch.wyrdwerk.com/api/v1/models?provider=aster&amp;sort=input&amp;limit=20'
