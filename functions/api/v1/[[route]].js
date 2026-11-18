@@ -459,13 +459,13 @@ async function historyResponse(context, pricing, rawId) {
   try {
     requestedId = decodeURIComponent(rawId);
   } catch {
-    return json({ error: 'Invalid model id encoding' }, 400); // malformed %-encoding
+    return errorJson('invalid_parameter', 'Invalid model id encoding', 400); // malformed %-encoding
   }
 
   const mixParam = parseMixParam(params.get('mix'));
-  if (!mixParam.ok) return json({ error: mixParam.error, parameter: 'mix' }, 400);
+  if (!mixParam.ok) return invalidParameter('mix', mixParam.error);
   const daysParam = parseDaysParam(params.get('days'));
-  if (!daysParam.ok) return json({ error: daysParam.error, parameter: 'days' }, 400);
+  if (!daysParam.ok) return invalidParameter('days', daysParam.error);
   const mix = mixParam.mix;
   const days = daysParam.days;
 
@@ -479,10 +479,9 @@ async function historyResponse(context, pricing, rawId) {
   if (!db) {
     // Local dev without the D1 binding, or a deployment missing it. Fail
     // loudly with a 503 rather than pretending the model has no history.
-    return json({
-      error: 'Price history is not configured',
+    return errorJson('history_unavailable', 'Price history is not configured', 503, {
       detail: 'The PRICE_HISTORY D1 binding is unavailable in this environment',
-    }, 503);
+    });
   }
 
   const today = utcDay(new Date());
@@ -801,7 +800,7 @@ async function handleGet(context) {
       try {
         requestedId = decodeURIComponent(rawId);
       } catch {
-        return json({ error: 'Invalid model id encoding' }, 400); // malformed %-encoding
+        return errorJson('invalid_parameter', 'Invalid model id encoding', 400); // malformed %-encoding
       }
       const target = canonicalId(requestedId);
       const matches = pricing.models.filter(m => canonicalId(m.id) === target);
@@ -892,8 +891,10 @@ async function handleGet(context) {
     ]) {
       if (!params.has(param)) continue;
       const raw = params.get(param);
-      if (!/^\d+$/.test(raw)) {
-        return invalidParameter(param, `${param} must be a non-negative integer`);
+      // Intelligence indices are decimals (e.g. 45.5); token counts are integers.
+      const decimal = param === 'min_intelligence';
+      if (!(decimal ? /^\d+(\.\d+)?$/ : /^\d+$/).test(raw)) {
+        return invalidParameter(param, `${param} must be a non-negative ${decimal ? 'number' : 'integer'}`);
       }
       const min = Number(raw);
       if (min > 0) models = models.filter((m) => {
@@ -994,7 +995,7 @@ async function handleGet(context) {
       try {
         requestedId = decodeURIComponent(subPath);
       } catch {
-        return json({ error: 'Invalid model id encoding' }, 400); // malformed %-encoding
+        return errorJson('invalid_parameter', 'Invalid model id encoding', 400); // malformed %-encoding
       }
       const target = canonicalId(requestedId);
       const model = findMediaModel(imagePricing.models, requestedId, target);
@@ -1074,7 +1075,7 @@ async function handleGet(context) {
       try {
         requestedId = decodeURIComponent(subPath);
       } catch {
-        return json({ error: 'Invalid model id encoding' }, 400); // malformed %-encoding
+        return errorJson('invalid_parameter', 'Invalid model id encoding', 400); // malformed %-encoding
       }
       const target = canonicalId(requestedId);
       const model = findMediaModel(videoPricing.models, requestedId, target);

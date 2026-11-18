@@ -388,9 +388,12 @@ test('API documentation renders from the same endpoint metadata as API discovery
   }
   const openWeights = openApi.paths['/api/v1/models'].get.parameters.find((parameter) => parameter.name === 'open_weights');
   assert.deepEqual(openWeights.schema, { type: 'boolean' });
-  assert.match(openWeights.description, /unknown statuses are excluded/);
+  assert.match(openWeights.description, /Unknown statuses are excluded/);
   const recommend = openApi.paths['/api/v1/recommend'].get.parameters;
-  assert.match(openApi.paths['/api/v1/recommend'].get.responses[200].description, /Arena preference\.favorite/);
+  // The 200 body is now a component schema rather than an untyped object.
+  assert.deepEqual(openApi.paths['/api/v1/recommend'].get.responses[200].content['application/json'].schema,
+    { $ref: '#/components/schemas/RecommendResponse' });
+  assert.match(openApi.paths['/api/v1/recommend'].get.responses[200].description, /Arena `preference`/);
   assert.equal(recommend.find((parameter) => parameter.name === 'use_case').required, true);
   assert.deepEqual(recommend.find((parameter) => parameter.name === 'priority').schema.enum,
     ['balanced', 'cheapest', 'fastest', 'most-reliable']);
@@ -398,7 +401,7 @@ test('API documentation renders from the same endpoint metadata as API discovery
   assert.equal(recommend.find((parameter) => parameter.name === 'exclude_hq').schema.pattern,
     '^[A-Za-z]{2}(,[A-Za-z]{2})*$');
   assert.deepEqual(recommend.find((parameter) => parameter.name === 'include_proprietary').schema,
-    { type: 'boolean' });
+    { type: 'boolean', default: false });
   assert.deepEqual(recommend.find((parameter) => parameter.name === 'detail').schema,
     { type: 'string', enum: ['compact', 'full'], default: 'compact' });
   assert.deepEqual(recommend.find((parameter) => parameter.name === 'limit').schema,

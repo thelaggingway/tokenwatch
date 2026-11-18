@@ -26,6 +26,12 @@ jobs:
           TW_PARITY_LIVE: '0'
         run: node --test test/*.test.mjs
 
+      # A root Wrangler config copied for local D1 work is auto-discovered by
+      # the Pages publisher and would bind the placeholder PRICE_HISTORY
+      # database to production. Fail here, before the build, with guidance.
+      - name: Guard against an auto-discovered local Wrangler config
+        run: node scripts/check-no-local-wrangler.mjs
+
       # Exercise the deploy build before merge using the committed catalogs.
       # No provider API keys or Cloudflare deployment credentials are needed.
       - name: Generate SEO

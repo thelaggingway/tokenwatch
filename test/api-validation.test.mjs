@@ -115,6 +115,9 @@ test('min_context, min_output and min_intelligence reject non-numeric and negati
   // "1M" must not be truncated to 1 by parseInt.
   assert.equal((await get('/api/v1/models', '?min_context=1000000')).status, 200);
   assert.equal((await get('/api/v1/models', '?min_intelligence=0')).status, 200);
+  assert.equal((await get('/api/v1/models', '?min_intelligence=45.5')).status, 200,
+    'intelligence indices are decimals, so a decimal floor is valid');
+  assert.equal((await get('/api/v1/models', '?min_context=1.5')).status, 400);
 });
 
 test('min_context=1e6 no longer silently returns nearly every model', async () => {

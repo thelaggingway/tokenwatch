@@ -176,6 +176,56 @@ async function runWidget(dom) {
   vm.runInContext(src, context, { filename: 'advisor-widget.js' });
 }
 
+// ── Request payload stays inside the API's documented limits ─────────────────
+
+test('relayed conversation never exceeds the advisor API message limits', async () => {
+  const dom = makeDom({ withHeaderLinks: true });
+  // Serve a very long assistant reply, then capture the next request's payload.
+  const longReply = 'A'.repeat(4000);
+  const requests = [];
+  const src = await readFile(WIDGET_JS, 'utf-8');
+  const context = vm.createContext({
+    window: dom.window,
+    document: dom.document,
+    localStorage: dom.localStorage,
+    fetch: async (url, options) => {
+      requests.push(JSON.parse(options.body));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ reply: longReply, rateLimit: { remaining: 3, max: 4 } }),
+      };
+    },
+    console,
+    setTimeout,
+    clearTimeout,
+  });
+  vm.runInContext(src, context, { filename: 'advisor-widget.js' });
+
+  dom.document.getElementById('tw-advisor-bubble').dispatchEvent({ type: 'click' });
+  const input = dom.document.getElementById('tw-advisor-input');
+  const send = dom.document.getElementById('tw-advisor-send');
+
+  // Four turns: the history now holds repeatedly-long assistant replies.
+  for (let i = 0; i < 4; i += 1) {
+    input.value = `question ${i}`;
+    send.dispatchEvent({ type: 'click' });
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  assert.ok(requests.length >= 2, 'turns after the first relay prior history');
+  for (const request of requests) {
+    assert.ok(Array.isArray(request.messages), 'payload keeps the messages array shape');
+    assert.ok(request.messages.length <= 12, `sent ${request.messages.length} messages, limit is 12`);
+    const totalChars = request.messages.reduce((n, m) => n + m.content.length, 0);
+    assert.ok(totalChars <= 12000, `sent ${totalChars} characters, limit is 12000`);
+    for (const message of request.messages) {
+      assert.equal(typeof message.content, 'string');
+      assert.ok(['user', 'assistant'].includes(message.role), 'only user/assistant roles are relayed');
+    }
+  }
+});
+
 test('closed launcher is mounted into existing .header-links actions', async () => {
   const dom = makeDom({ withHeaderLinks: true });
   await runWidget(dom);
