@@ -486,7 +486,8 @@ function estimateOffering(model, tokens, mix) {
     provider_display: model.provider_display ?? null,
     quantization: model.quantization ?? null,
     rate_per_mtok: rate,
-    cost_usd: rate * tokens,
+    // rate is USD per million tokens; tokens is a raw token count.
+    cost_usd: rate * tokens / 1e6,
     unpriceable_reason: null,
   };
 }

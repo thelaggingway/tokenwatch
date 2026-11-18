@@ -122,6 +122,20 @@
           <li><code>days</code> <em>integer, default 90</em> — Window length in days, today inclusive. Values outside 1-90 or non-numeric return 400.</li>
           <li><code>mix</code> <em>string</em> — Three percentages (fresh input, cached input, output) summing to 100 ±0.5, blended at read time against the stored raw tariffs. Malformed mixes return 400. Defaults to the agentic mix 2.5, 97, 0.5.</li>
         </ul>
+        <h3><code>/api/v1/estimate</code></h3>
+        <ul>
+          <li><code>model</code> <strong>(required)</strong> <em>string</em> — Canonical or org/model id.</li>
+          <li><code>tokens</code> <strong>(required)</strong> <em>number</em> — Raw token count to price (for example 1000000 for one million). Must be positive.</li>
+          <li><code>mix</code> <em>string</em> — Fresh input, cached input and output percentages summing to 100. Required unless <code>use_case</code> is given; the two are mutually exclusive.</li>
+          <li><code>use_case</code> <em>string</em> — Take the mix from this workload preset instead of <code>mix</code>. The response marks the mix <code>assumed: true</code>.</li>
+        </ul>
+        <h3><code>/api/v1/compare</code></h3>
+        <ul>
+          <li><code>models</code> <strong>(required)</strong> <em>string</em> — Comma-separated canonical or org/model ids, at most 20 after de-duplication. Unknown ids are reported in <code>not_found</code> rather than failing the request.</li>
+          <li><code>tokens</code> <strong>(required)</strong> <em>number</em> — Raw token count to price (for example 1000000 for one million). Must be positive.</li>
+          <li><code>mix</code> <em>string</em> — Fresh input, cached input and output percentages summing to 100. Required unless <code>use_case</code> is given; the two are mutually exclusive.</li>
+          <li><code>use_case</code> <em>string</em> — Take the mix from this workload preset instead of <code>mix</code>. The response marks the mix <code>assumed: true</code>.</li>
+        </ul>
         <h3><code>/api/v1/providers</code></h3>
         <ul>
           <li><code>zdr</code> <em>boolean</em> — When <code>true</code>, keep only providers whose metadata says <code>retains_prompts: false</code>.</li>

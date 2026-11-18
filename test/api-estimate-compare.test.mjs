@@ -45,10 +45,10 @@ async function get(pathname, search = '') {
 
 test('estimate returns per-provider rates and costs sorted cheapest first', async () => {
   // 100% input at $1/M for 2M tokens = $2; provider b = $8.
-  const { status, body } = await get('/api/v1/estimate', '?model=o/model&tokens=2&mix=100,0,0');
+  const { status, body } = await get('/api/v1/estimate', '?model=o/model&tokens=2000000&mix=100,0,0');
   assert.equal(status, 200);
   assert.equal(body.model, 'model', 'reports the canonical id');
-  assert.equal(body.tokens, 2);
+  assert.equal(body.tokens, 2000000);
   assert.deepEqual(body.mix, { inputPct: 100, cacheReadPct: 0, outputPct: 0 });
 
   const priced = body.providers.filter((p) => p.cost_usd !== null);
@@ -57,10 +57,14 @@ test('estimate returns per-provider rates and costs sorted cheapest first', asyn
   assert.equal(priced[0].cost_usd, 2);
   assert.equal(priced[1].cost_usd, 8);
   assert.equal(priced[0].quantization, 'fp8');
+
+  // rate_per_mtok is per million tokens, so 1,000 tokens at $1/M cost $0.001.
+  const small = await get('/api/v1/estimate', '?model=o/model&tokens=1000&mix=100,0,0');
+  assert.equal(small.body.providers[0].cost_usd, 0.001);
 });
 
 test('estimate lists unpriceable offerings last with a reason and a null cost, never $0', async () => {
-  const { body } = await get('/api/v1/estimate', '?model=o/model&tokens=2&mix=100,0,0');
+  const { body } = await get('/api/v1/estimate', '?model=o/model&tokens=2000000&mix=100,0,0');
   const unpriced = body.providers.at(-1);
   assert.equal(unpriced.provider, 'c');
   assert.equal(unpriced.cost_usd, null);
@@ -103,7 +107,7 @@ test('estimate validates its parameters', async () => {
 // ── /compare ─────────────────────────────────────────────────────────────────
 
 test('compare reports cheapest, max, spread and savings per model', async () => {
-  const { status, body } = await get('/api/v1/compare', '?models=o/model,o/other&tokens=1&mix=100,0,0');
+  const { status, body } = await get('/api/v1/compare', '?models=o/model,o/other&tokens=1000000&mix=100,0,0');
   assert.equal(status, 200);
   const model = body.models.find((m) => m.model === 'model');
   // provider a: $1/M, provider b: $4/M, provider c unpriceable
