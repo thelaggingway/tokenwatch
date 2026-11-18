@@ -47,6 +47,7 @@ import { dirname, join } from 'node:path';
 import {
   RETENTION_DAYS,
   retentionCutoff,
+  shiftUtcDay,
   toSnapshotRow,
   utcDay,
 } from '../shared/price-history.mjs';
@@ -54,6 +55,12 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const DB_NAME = 'tokenwatch-price-history';
+
+/**
+ * Upper bound for a local backfill. Beyond the retention window older days are
+ * deleted in the same batch, so a larger count cannot produce more usable rows.
+ */
+export const MAX_SEED_DAYS = RETENTION_DAYS;
 
 const COLUMNS = [
   'utc_day', 'offering_key', 'canonical_model', 'provider', 'quantization', 'sku',
@@ -210,6 +217,52 @@ export async function runSnapshotBatch(statements, { cwd = ROOT, log = () => {},
   }
 }
 
+/**
+ * Deterministic per-day price variation for LOCAL backfills.
+ *
+ * Repeating one catalog for N days produces a flat chart that never exercises
+ * provider switching — the behaviour the history endpoint exists to serve. This
+ * scales each offering's published input/output rates by a factor derived from
+ * the UTC day and the offering's index, so the same arguments always yield the
+ * same rows while different days differ enough to change the cheapest provider.
+ *
+ * Not used for real snapshots: `main()` only applies it under `--seed-days`,
+ * which is local-only.
+ */
+export function varyPricingForDay(pricing, day, { spread = 0.25 } = {}) {
+  const models = (pricing.models || []).map((model, index) => {
+    // FNV-1a over `day:index`. Hashing the day *with* the index means adjacent
+    // days disagree on every offering; hashing them separately (or with a
+    // multiply/xor mix) let one-character day changes leave prices ~identical.
+    const unit = fnv1aUnit(`${day}:${index}`);
+    const factor = 1 - spread + unit * spread * 2;
+    if (!model.pricing) return model;
+    const scaled = { ...model.pricing };
+    for (const key of ['input', 'output']) {
+      if (typeof scaled[key] === 'number') scaled[key] = Number((scaled[key] * factor).toFixed(4));
+    }
+    return { ...model, pricing: scaled };
+  });
+  return { ...pricing, models };
+}
+
+/** Deterministic 0..1 value for a string, via 32-bit FNV-1a. */
+function fnv1aUnit(value) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash / 0xffffffff;
+}
+
+/** The `count` UTC days ending at `anchor`, oldest first. */
+export function seedDaysFor(anchor, count) {
+  const days = [];
+  for (let offset = count - 1; offset >= 0; offset--) days.push(shiftUtcDay(anchor, -offset));
+  return days;
+}
+
 /** True when the day already has a claim row. */
 export async function readDayClaim(day, options = {}) {
   const output = await runD1(['--command',
@@ -219,7 +272,11 @@ export async function readDayClaim(day, options = {}) {
 }
 
 export function parseArgs(argv) {
-  const args = { local: false, remote: false, dryRun: false, force: false, date: null, pricing: join(ROOT, 'public', 'pricing.json') };
+  const args = {
+    local: false, remote: false, dryRun: false, force: false, date: null,
+    pricing: join(ROOT, 'public', 'pricing.json'),
+    seedDays: null, vary: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--local') args.local = true;
@@ -228,14 +285,56 @@ export function parseArgs(argv) {
     else if (arg === '--force') args.force = true;
     else if (arg === '--date') args.date = argv[++i];
     else if (arg === '--pricing') args.pricing = argv[++i];
+    else if (arg === '--seed-days') args.seedDays = argv[++i];
+    else if (arg === '--vary') args.vary = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
   if (args.local === args.remote) throw new Error('choose exactly one of --local or --remote');
+  if (args.seedDays !== null) {
+    // Backfilling N days is a local-only convenience. Production history is
+    // written one real day at a time by the refresh workflow, and an
+    // accidental `--remote --seed-days 90` would fabricate invented prices.
+    if (!args.local) throw new Error('--seed-days requires --local');
+    if (!/^[1-9]\d*$/.test(String(args.seedDays))) throw new Error('--seed-days must be a positive integer');
+    args.seedDays = Number(args.seedDays);
+    if (args.seedDays > MAX_SEED_DAYS) throw new Error(`--seed-days must be at most ${MAX_SEED_DAYS} (the retention window)`);
+  }
+  if (args.vary && args.seedDays === null) throw new Error('--vary is only valid with --seed-days');
   return args;
 }
 
 export async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
+
+  if (args.seedDays !== null) {
+    // parseArgs guarantees --local, but re-assert before any write: this path
+    // must never reach a remote database.
+    if (!args.local || args.remote) throw new Error('--seed-days is local-only and must never run against remote D1');
+    const anchor = args.date || utcDay(new Date());
+    const source = JSON.parse(await readFile(args.pricing, 'utf8'));
+    const days = seedDaysFor(anchor, args.seedDays);
+    const results = [];
+    for (const day of days) {
+      const pricing = args.vary ? varyPricingForDay(source, day) : source;
+      const batch = buildSnapshotStatements(
+        pricing.models, day, pricing.generated_at, RETENTION_DAYS, { force: args.force },
+      );
+      if (args.dryRun) {
+        console.log(`snapshot-prices: dry run — ${batch.rowCount} rows for ${day}`);
+        results.push({ day, rowCount: batch.rowCount, dryRun: true });
+        continue;
+      }
+      results.push({
+        day,
+        rowCount: batch.rowCount,
+        claim: await writeDay(batch, day, { remote: false, force: args.force }),
+      });
+    }
+    const total = results.reduce((sum, result) => sum + result.rowCount, 0);
+    console.log(`snapshot-prices: seeded ${days.length} local day(s) ${days[0]} → ${days.at(-1)} (${total} rows total)`);
+    return results;
+  }
+
   const day = args.date || utcDay(new Date());
   const pricing = JSON.parse(await readFile(args.pricing, 'utf8'));
   const batch = buildSnapshotStatements(pricing.models, day, pricing.generated_at, RETENTION_DAYS, { force: args.force });
@@ -245,23 +344,32 @@ export async function main(argv = process.argv.slice(2)) {
     return batch;
   }
 
-  const options = { remote: args.remote, log: (out) => process.stdout.write(out + '\n') };
+  await writeDay(batch, day, { remote: args.remote, force: args.force });
+  return batch;
+}
+
+/**
+ * Write one day's batch, reporting the claim outcome. Extracted so the
+ * single-day and seeded paths share the first-success-wins behaviour.
+ */
+async function writeDay(batch, day, { remote, force }) {
+  const options = { remote, log: (out) => process.stdout.write(out + '\n') };
   const claim = await readDayClaim(day, options);
-  if (claim && !args.force) {
+  if (claim && !force) {
     // The day is already owned by an earlier successful catalog. The batch is
     // still executed so retention runs, but every row write is gated on this
     // run's claim token, which `INSERT OR IGNORE` did not install — so no price
     // is rewritten and no newly appearing offering is appended.
     await runSnapshotBatch(batch.statements, options);
     console.log(`snapshot-prices: ${day} already claimed by ${claim.source_generated_at ?? 'an earlier run'} at ${claim.claimed_at}; prices left unchanged (${claim.offering_count} offerings)`);
-    return batch;
+    return { status: 'already-claimed', offerings: claim.offering_count };
   }
 
   await runSnapshotBatch(batch.statements, options);
-  console.log(args.force && claim
+  console.log(force && claim
     ? `snapshot-prices: force-replaced ${day} with ${batch.rowCount} rows (retention cutoff ${batch.cutoff})`
     : `snapshot-prices: claimed ${day} with ${batch.rowCount} rows (retention cutoff ${batch.cutoff})`);
-  return batch;
+  return { status: force && claim ? 'force-replaced' : 'claimed', offerings: batch.rowCount };
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
