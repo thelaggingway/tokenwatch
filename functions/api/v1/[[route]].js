@@ -433,6 +433,157 @@ function parseSort(params, validSorts, fallback = 'id') {
 // ── Price history ─────────────────────────────────────────────────────────────
 
 /**
+ * Shared mix/tokens parsing for the estimate and compare routes.
+ *
+ * `mix` and `use_case` are mutually exclusive: a preset already carries a
+ * documented mix, so accepting both would make the effective mix ambiguous.
+ */
+function parseCostQuery(params) {
+  const tokensRaw = params.get('tokens');
+  if (tokensRaw === null || tokensRaw === '') {
+    return { ok: false, response: invalidParameter('tokens', 'tokens is required and must be a positive number') };
+  }
+  const tokens = Number(tokensRaw);
+  if (!/^\d+(\.\d+)?$/.test(tokensRaw) || !Number.isFinite(tokens) || tokens <= 0) {
+    return { ok: false, response: invalidParameter('tokens', 'tokens must be a positive number') };
+  }
+
+  const useCase = params.get('use_case');
+  const hasMix = params.has('mix');
+  if (useCase && hasMix) {
+    return { ok: false, response: invalidParameter('mix', 'use mix or use_case, not both') };
+  }
+  if (useCase) {
+    if (!Object.hasOwn(USE_CASES, useCase)) {
+      return { ok: false, response: invalidParameter('use_case', `Unknown use_case: ${useCase}`) };
+    }
+    return { ok: true, tokens, mix: USE_CASES[useCase].mix, useCase };
+  }
+
+  if (!hasMix) {
+    return { ok: false, response: invalidParameter('mix', 'mix is required (or supply use_case)') };
+  }
+  const mixParam = parseMixParam(params.get('mix'));
+  if (!mixParam.ok) return { ok: false, response: invalidParameter('mix', mixParam.error) };
+  return { ok: true, tokens, mix: mixParam.mix, useCase: null };
+}
+
+/** Per-offering cost at a token count. Unpriceable stays null, never $0. */
+function estimateOffering(model, tokens, mix) {
+  const rate = blendedRate(model.pricing, mix);
+  if (rate == null) {
+    return {
+      provider: model.provider,
+      provider_display: model.provider_display ?? null,
+      quantization: model.quantization ?? null,
+      rate_per_mtok: null,
+      cost_usd: null,
+      unpriceable_reason: 'no published price for a requested leg of this mix',
+    };
+  }
+  return {
+    provider: model.provider,
+    provider_display: model.provider_display ?? null,
+    quantization: model.quantization ?? null,
+    rate_per_mtok: rate,
+    cost_usd: rate * tokens,
+    unpriceable_reason: null,
+  };
+}
+
+const estimateSort = (a, b) =>
+  (a.cost_usd ?? Infinity) - (b.cost_usd ?? Infinity) || String(a.provider).localeCompare(String(b.provider));
+
+function estimateResponse(pricing, params) {
+  const model = params.get('model')?.trim();
+  if (!model) return invalidParameter('model', 'model is required');
+
+  const query = parseCostQuery(params);
+  if (!query.ok) return query.response;
+
+  const target = canonicalId(model);
+  const offerings = pricing.models.filter((m) => canonicalId(String(m.id)) === target);
+  if (!offerings.length) return errorJson('model_not_found', 'Model not found', 404, { canonical_id: model });
+
+  const rows = offerings.map((m) => estimateOffering(m, query.tokens, query.mix)).sort(estimateSort);
+  return json({
+    generated_at: pricing.generated_at,
+    model: target,
+    requested_model: model,
+    tokens: query.tokens,
+    ...(query.useCase ? { use_case: query.useCase } : {}),
+    // `assumed: true` flags a preset mix, matching /recommend's convention.
+    mix: query.useCase ? { ...query.mix, assumed: true } : { ...query.mix },
+    provider_count: rows.length,
+    providers: rows,
+  });
+}
+
+const MAX_COMPARE_MODELS = 20;
+
+function compareResponse(pricing, params) {
+  const raw = params.get('models');
+  if (!raw || !raw.trim()) return invalidParameter('models', 'models is required (comma-separated ids)');
+
+  const ids = [...new Set(raw.split(',').map((id) => id.trim()).filter(Boolean))];
+  if (!ids.length) return invalidParameter('models', 'models is required (comma-separated ids)');
+  if (ids.length > MAX_COMPARE_MODELS) {
+    return invalidParameter('models', `models accepts at most ${MAX_COMPARE_MODELS} ids`);
+  }
+
+  const query = parseCostQuery(params);
+  if (!query.ok) return query.response;
+
+  const models = [];
+  const notFound = [];
+  for (const id of ids) {
+    const target = canonicalId(id);
+    const offerings = pricing.models.filter((m) => canonicalId(String(m.id)) === target);
+    if (!offerings.length) {
+      notFound.push(id);
+      continue;
+    }
+    const rows = offerings.map((m) => estimateOffering(m, query.tokens, query.mix)).sort(estimateSort);
+    const priced = rows.filter((row) => row.cost_usd !== null);
+    const cheapest = priced[0] ?? null;
+    const dearest = priced.length ? priced[priced.length - 1] : null;
+    models.push({
+      model: target,
+      requested_model: id,
+      provider_count: rows.length,
+      unpriceable_count: rows.length - priced.length,
+      cheapest: cheapest && {
+        provider: cheapest.provider,
+        provider_display: cheapest.provider_display,
+        quantization: cheapest.quantization,
+        rate_per_mtok: cheapest.rate_per_mtok,
+        cost_usd: cheapest.cost_usd,
+      },
+      max_provider: dearest ? dearest.provider : null,
+      max_cost_usd: dearest ? dearest.cost_usd : null,
+      spread_usd: cheapest && dearest ? round6(dearest.cost_usd - cheapest.cost_usd) : null,
+      savings_vs_most_expensive_usd: cheapest && dearest ? round6(dearest.cost_usd - cheapest.cost_usd) : null,
+    });
+  }
+
+  return json({
+    generated_at: pricing.generated_at,
+    tokens: query.tokens,
+    ...(query.useCase ? { use_case: query.useCase } : {}),
+    mix: query.useCase ? { ...query.mix, assumed: true } : { ...query.mix },
+    request_count: ids.length,
+    found_count: models.length,
+    models,
+    not_found: notFound,
+  });
+}
+
+/** Round a USD figure to cents-safe precision without float dust. */
+function round6(value) {
+  return Math.round(value * 1e6) / 1e6;
+}
+
+/**
  * GET /api/v1/models/:canonicalId/history?days=90&mix=2.5,97,0.5
  *
  * Reads raw USD-per-million snapshot rows and blends them at read time, so the
@@ -774,6 +925,13 @@ async function handleGet(context) {
     if (response) return response;
     if (path === 'use-cases') return useCasesResponse(pricing);
     return recommendationResponse(context, pricing, path === 'recommend/providers');
+  }
+
+  // ── Cost estimate and multi-model comparison ──
+  if (path === 'estimate' || path === 'compare') {
+    const { pricing, response } = await pricingOrError();
+    if (response) return response;
+    return path === 'estimate' ? estimateResponse(pricing, params) : compareResponse(pricing, params);
   }
 
   // ── Route: /api/v1/models[/:canonicalId/providers|/:canonicalId/history] ──
