@@ -152,10 +152,11 @@ test('enum parameters match the preset tables the router validates against', () 
   assert.deepEqual(sort.schema.enum, registrySort);
 });
 
-test('limits document the clamping the router actually performs', () => {
+test('limits document the validation and clamping the router actually performs', () => {
   const listLimit = doc.paths['/api/v1/models'].get.parameters.find((p) => p.name === 'limit');
   assert.deepEqual(listLimit.schema, { type: 'integer', minimum: 1, maximum: 500, default: 100 });
-  assert.match(listLimit.description, /fall back to 100/);
+  assert.match(listLimit.description, /clamped to 500/);
+  assert.match(listLimit.description, /are a 400/);
   const imageLimit = doc.paths['/api/v1/images'].get.parameters.find((p) => p.name === 'limit');
   assert.equal(imageLimit.schema.maximum, 500);
   const recLimit = doc.paths['/api/v1/recommend'].get.parameters.find((p) => p.name === 'limit');
@@ -196,10 +197,13 @@ test('recommendation schemas cover the pick, group and preference shapes', () =>
   assert.match(providers.description, /never in `ranked`/);
 });
 
-test('error schema documents the parameter and detail envelopes the router emits', () => {
+test('error schema documents the code, parameter and detail envelopes the router emits', () => {
   const error = doc.components.schemas.Error;
-  assert.deepEqual(error.required, ['error']);
-  for (const field of ['parameter', 'code', 'detail', 'path', 'canonical_id', 'id']) {
+  assert.deepEqual(error.required, ['error', 'code']);
+  assert.equal(error.properties.error.type, 'string');
+  assert.ok(error.properties.code.enum.includes('invalid_parameter'));
+  assert.equal(error.properties.path, undefined, '404 bodies no longer echo the request path');
+  for (const field of ['parameter', 'code', 'detail', 'canonical_id', 'id']) {
     assert.ok(error.properties[field], `Error.${field} is missing`);
   }
 });

@@ -442,8 +442,11 @@ test('a database failure is reported as 503 instead of an empty chart', async ()
   db.failNext = new Error('no such table: price_snapshot');
   const { status, body } = await getJson(makeContext(HISTORY_PATH, '', db));
   assert.equal(status, 503);
+  assert.equal(body.code, 'history_unavailable');
   assert.match(body.error, /Failed to read price history/);
-  assert.match(body.detail, /no such table/);
+  // The driver message is logged server-side, never returned to the client.
+  assert.equal(body.detail, undefined);
+  assert.doesNotMatch(JSON.stringify(body), /no such table/);
 });
 
 test('the history route is discoverable from the API directory', async () => {

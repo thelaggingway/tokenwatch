@@ -38,6 +38,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Content-Type': 'application/json',
+  'X-Content-Type-Options': 'nosniff',
   'X-Robots-Tag': 'noindex',
 };
 
@@ -47,6 +48,28 @@ function json(data, status = 200, { pretty = true } = {}) {
     headers: CORS_HEADERS,
   });
 }
+
+/**
+ * Every error body carries a stable `code` so clients can branch without
+ * matching prose. `error` stays a string: the WebMCP tools and the embed
+ * widget read it directly.
+ */
+function errorJson(code, message, status, extra = {}) {
+  return json({ error: message, code, ...extra }, status);
+}
+
+function invalidParameter(parameter, message) {
+  return errorJson('invalid_parameter', message, 400, { parameter });
+}
+
+/** ISO-3166-1 alpha-2 codes, for validating exclude_hq without a dependency. */
+const ISO_3166_ALPHA2 = new Set(`AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ
+CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR
+GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP
+KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT
+MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW
+SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG
+UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW`.split(/\s+/).filter(Boolean));
 
 const PRIORITIES = new Set(Object.keys(PRIORITY_PROVIDER_WEIGHTS));
 
@@ -103,7 +126,12 @@ function parseRecommendationParams(params, { requireModel = false } = {}) {
     if (!value || !/^[a-z]{2}(?:,[a-z]{2})*$/i.test(value)) {
       return { ok: false, error: 'exclude_hq must be a comma-separated list of two-letter country codes', parameter: 'exclude_hq' };
     }
-    excludeHQ = [...new Set(value.split(',').map((country) => country.toUpperCase()))];
+    const codes = [...new Set(value.split(',').map((country) => country.toUpperCase()))];
+    const unknown = codes.filter((code) => !ISO_3166_ALPHA2.has(code));
+    if (unknown.length) {
+      return { ok: false, error: `exclude_hq has unknown country codes: ${unknown.join(', ')}`, parameter: 'exclude_hq' };
+    }
+    excludeHQ = codes;
   }
 
   let model = null;
@@ -140,7 +168,8 @@ async function loadRecommendationAssets(context) {
     ]);
     return { ok: true, benchmarks, performance };
   } catch (error) {
-    return { ok: false, response: json({ error: 'Failed to load recommendation data', detail: error.message }, 503) };
+    console.error('Failed to load recommendation assets:', error?.message || error);
+    return { ok: false, response: errorJson('recommendation_data_unavailable', 'Failed to load recommendation data', 503) };
   }
 }
 
@@ -295,19 +324,63 @@ function findMediaModel(models, requestedId, canonicalTarget) {
     ?? models.find((m) => canonicalId(String(m.id)) === canonicalTarget);
 }
 
-function paginate(arr, params) {
-  // Clamp user input: limit ∈ [1,500], offset ≥ 0. Non-numeric, zero, or negative
-  // values fall back to the defaults — a negative offset would silently slice
-  // from the END of the array and a negative limit would drop trailing rows.
-  const requestedLimit = parseInt(params.get('limit'), 10);
-  const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
-    ? Math.min(requestedLimit, 500)
-    : 100;
-  const requestedOffset = parseInt(params.get('offset'), 10);
-  const offset = Number.isFinite(requestedOffset) && requestedOffset > 0 ? requestedOffset : 0;
-  const total = arr.length;
-  const paged = arr.slice(offset, offset + limit);
-  return { total, offset, limit, paged };
+const MAX_PAGE_LIMIT = 500;
+
+/**
+ * Parse `limit`/`offset` for a list route.
+ *
+ * Rejects anything that is not a plain non-negative integer rather than
+ * truncating it: `1.5`, `1e3` and `abc` used to become 1, which silently
+ * returned the wrong page. `limit` above the documented cap still clamps to
+ * MAX_PAGE_LIMIT and the response reports the applied value.
+ */
+function paginationFor(params, total) {
+  let limit = 100;
+  if (params.has('limit')) {
+    const raw = params.get('limit');
+    if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+      return { ok: false, response: invalidParameter('limit', 'limit must be a positive integer') };
+    }
+    limit = Math.min(Number(raw), MAX_PAGE_LIMIT);
+  }
+
+  let offset = 0;
+  if (params.has('offset')) {
+    const raw = params.get('offset');
+    if (!/^\d+$/.test(raw)) {
+      return { ok: false, response: invalidParameter('offset', 'offset must be a non-negative integer') };
+    }
+    offset = Number(raw);
+  }
+
+  return { ok: true, total, offset, limit, paged: null };
+}
+
+/** Split a validated page out of the array. */
+function pageOf(items, page) {
+  return { ...page, paged: items.slice(page.offset, page.offset + page.limit) };
+}
+
+/** `order=asc|desc`, case-insensitive. `desc` reverses the comparator. */
+function parseOrder(params) {
+  if (!params.has('order')) return { ok: true, order: 1 };
+  const raw = String(params.get('order')).toLowerCase();
+  if (raw === 'asc') return { ok: true, order: 1 };
+  if (raw === 'desc') return { ok: true, order: -1 };
+  return { ok: false, response: invalidParameter('order', 'order must be asc or desc') };
+}
+
+/** A documented sort key, or a 400 naming it. */
+function parseSort(params, validSorts, fallback = 'id') {
+  if (!params.has('sort')) return { ok: true, sort: fallback };
+  const raw = params.get('sort');
+  if (!validSorts.includes(raw)) {
+    return {
+      ok: false,
+      response: invalidParameter('sort', `sort must be one of: ${validSorts.join(', ')}`),
+    };
+  }
+  return { ok: true, sort: raw };
 }
 
 // ── Price history ─────────────────────────────────────────────────────────────
@@ -333,36 +406,35 @@ async function historyResponse(context, pricing, rawId) {
   const { request, env } = context;
   const params = new URL(request.url).searchParams;
 
-  if (!rawId) return json({ error: 'Not found' }, 404); // "models/history"
+  if (!rawId) return errorJson('not_found', 'Not found', 404); // "models/history"
 
   let requestedId;
   try {
     requestedId = decodeURIComponent(rawId);
   } catch {
-    return json({ error: 'Invalid model id encoding' }, 400); // malformed %-encoding
+    return errorJson('invalid_parameter', 'Invalid model id encoding', 400); // malformed %-encoding
   }
 
   const mixParam = parseMixParam(params.get('mix'));
-  if (!mixParam.ok) return json({ error: mixParam.error, parameter: 'mix' }, 400);
+  if (!mixParam.ok) return invalidParameter('mix', mixParam.error);
   const daysParam = parseDaysParam(params.get('days'));
-  if (!daysParam.ok) return json({ error: daysParam.error, parameter: 'days' }, 400);
+  if (!daysParam.ok) return invalidParameter('days', daysParam.error);
   const mix = mixParam.mix;
   const days = daysParam.days;
 
   const target = canonicalId(requestedId);
   const known = pricing.models.some((m) => canonicalId(m.id) === target);
   if (!known) {
-    return json({ error: 'Model not found', canonical_id: requestedId }, 404);
+    return errorJson('model_not_found', 'Model not found', 404, { canonical_id: requestedId });
   }
 
   const db = env?.PRICE_HISTORY;
   if (!db) {
     // Local dev without the D1 binding, or a deployment missing it. Fail
     // loudly with a 503 rather than pretending the model has no history.
-    return json({
-      error: 'Price history is not configured',
+    return errorJson('history_unavailable', 'Price history is not configured', 503, {
       detail: 'The PRICE_HISTORY D1 binding is unavailable in this environment',
-    }, 503);
+    });
   }
 
   const today = utcDay(new Date());
@@ -389,7 +461,8 @@ async function historyResponse(context, pricing, rawId) {
     rows = result?.results ?? [];
     if (splitHy4) rows = rows.filter((row) => canonicalId(row.model_id) === target);
   } catch (err) {
-    return json({ error: 'Failed to read price history', detail: err.message }, 503);
+    console.error('Failed to read price history:', err?.message || err);
+    return errorJson('history_unavailable', 'Failed to read price history', 503);
   }
 
   const allDays = buildHistorySeries(rows, mix);
@@ -434,11 +507,11 @@ async function recommendationResponse(context, pricing, providersOnly) {
   const { request } = context;
   const params = new URL(request.url).searchParams;
   const parsed = parseRecommendationParams(params, { requireModel: providersOnly });
-  if (!parsed.ok) return json({ error: parsed.error, parameter: parsed.parameter }, 400);
+  if (!parsed.ok) return invalidParameter(parsed.parameter, parsed.error);
 
   const target = providersOnly ? canonicalId(parsed.model) : null;
   if (target && !pricing.models.some((model) => canonicalId(String(model.id)) === target)) {
-    return json({ error: 'Model not found', canonical_id: parsed.model }, 404);
+    return errorJson('model_not_found', 'Model not found', 404, { canonical_id: parsed.model });
   }
 
   const assets = await loadRecommendationAssets(context);
@@ -518,8 +591,12 @@ export async function onRequestGet(context) {
     const res = await env.ASSETS.fetch(new URL('/pricing.json', request.url));
     if (!res.ok) throw new Error(`pricing.json not found: ${res.status}`);
     pricing = await res.json();
+    // A truncated or replaced catalog must not surface as an uncaught TypeError
+    // from every route that iterates pricing.models.
+    if (!pricing || !Array.isArray(pricing.models)) throw new Error('pricing.json is missing its models array');
   } catch (err) {
-    return json({ error: 'Failed to load pricing data', detail: err.message }, 503);
+    console.error('Failed to load pricing data:', err?.message || err);
+    return errorJson('catalog_unavailable', 'Failed to load pricing data', 503);
   }
 
   // ── Route: /api/v1/ (empty path) → API info ──
@@ -585,8 +662,9 @@ export async function onRequestGet(context) {
   // ── Route: /api/v1/providers[?zdr=true] ──
   if (path === 'providers') {
     let meta = pricing.providers_meta || {};
-    const zdrOnly = params.get('zdr') === 'true';
-    if (zdrOnly) {
+    const zdrParam = parseOptionalBoolean(params, 'zdr');
+    if (!zdrParam.ok) return invalidParameter('zdr', zdrParam.error);
+    if (zdrParam.value) {
       const filtered = {};
       for (const [key, val] of Object.entries(meta)) {
         if (val.retains_prompts === false) filtered[key] = val;
@@ -623,30 +701,42 @@ export async function onRequestGet(context) {
     // shape and must 404 rather than fall through to the list handler.
     if (subPath !== '' && subPath.endsWith('/providers')) {
       const rawId = subPath.slice(0, -'/providers'.length);
-      if (!rawId) return json({ error: 'Not found', path }, 404); // "models/providers" (empty id)
+      if (!rawId) return errorJson('not_found', 'Not found', 404); // "models/providers" (empty id)
       let requestedId;
       try {
         requestedId = decodeURIComponent(rawId);
       } catch {
-        return json({ error: 'Invalid model id encoding' }, 400); // malformed %-encoding
+        return errorJson('invalid_parameter', 'Invalid model id encoding', 400); // malformed %-encoding
       }
       const target = canonicalId(requestedId);
       const matches = pricing.models.filter(m => canonicalId(m.id) === target);
 
       if (matches.length === 0) {
-        return json({ error: 'Model not found', canonical_id: requestedId }, 404);
+        return errorJson('model_not_found', 'Model not found', 404, { canonical_id: requestedId });
       }
 
       // Sort by cost — use mix-aware cost if params provided, else input+output
-      const reqTokens = parseFloat(params.get('tokens'));
-      const reqMix = params.get('mix'); // 'inputPct,cachePct,outputPct'
+      // `mix` alone is enough to sort by blended rate — public/app.js tells
+      // agents to call providers?mix=… without tokens. `tokens` only scales the
+      // figure; it never changes the order.
+      const mixParam = parseMixParam(params.get('mix'));
+      if (!mixParam.ok) return invalidParameter('mix', mixParam.error);
+      let reqTokens = null;
+      if (params.has('tokens')) {
+        const raw = params.get('tokens');
+        const value = Number(raw);
+        if (!/^\d+(\.\d+)?$/.test(raw) || !Number.isFinite(value) || value <= 0) {
+          return invalidParameter('tokens', 'tokens must be a positive number');
+        }
+        reqTokens = value;
+      }
+
       let sorted;
-      if (reqTokens > 0 && reqMix) {
-        const parts = reqMix.split(',').map(parseFloat);
-        const inputPct = parts[0] || 0, cachePct = parts[1] || 0, outputPct = parts[2] || 0;
+      if (params.has('mix')) {
+        const { inputPct, cacheReadPct, outputPct } = mixParam.mix;
         const costFn = (m) => {
-          const rate = blendedRate(m.pricing, { inputPct, cacheReadPct: cachePct, outputPct });
-          return rate == null ? Infinity : rate * reqTokens;
+          const rate = blendedRate(m.pricing, { inputPct, cacheReadPct, outputPct });
+          return rate == null ? Infinity : rate;
         };
         sorted = matches.sort((a, b) => costFn(a) - costFn(b));
       } else {
@@ -686,7 +776,7 @@ export async function onRequestGet(context) {
     // List route: only an empty subPath (`models` or `models/`). Reject every other
     // non-empty shape not handled by the detail route above — covers models/foo,
     // models/foo/bar, models/providers, and models/models.
-    if (subPath !== '') return json({ error: 'Not found', path }, 404);
+    if (subPath !== '') return errorJson('not_found', 'Not found', 404);
 
     // /api/v1/models — list with filters
     let models = pricing.models;
@@ -698,35 +788,47 @@ export async function onRequestGet(context) {
     const provider = params.get('provider');
     if (provider) models = models.filter(m => m.provider === provider.toLowerCase());
 
-    const minContext = parseInt(params.get('min_context'), 10);
-    if (minContext) models = models.filter(m => m.context_length && m.context_length >= minContext);
-
-    const minOutput = parseInt(params.get('min_output'), 10);
-    if (minOutput) models = models.filter(m => m.max_completion_tokens && m.max_completion_tokens >= minOutput);
-
-    if (params.has('min_intelligence')) {
-      const minIntelligence = Number(params.get('min_intelligence'));
-      if (Number.isFinite(minIntelligence) && minIntelligence > 0) models = models.filter(m => m.benchmarks?.intelligence_index != null && m.benchmarks.intelligence_index >= minIntelligence);
+    // Numeric minimums are integers only: "1M"/"1e6" must not be truncated to 1
+    // by parseInt, which silently returned nearly the whole catalog.
+    for (const [param, field, read] of [
+      ['min_context', 'context_length', (m) => m.context_length],
+      ['min_output', 'max_completion_tokens', (m) => m.max_completion_tokens],
+      ['min_intelligence', 'intelligence_index', (m) => m.benchmarks?.intelligence_index],
+    ]) {
+      if (!params.has(param)) continue;
+      const raw = params.get(param);
+      // Intelligence indices are decimals (e.g. 45.5); token counts are integers.
+      const decimal = param === 'min_intelligence';
+      if (!(decimal ? /^\d+(\.\d+)?$/ : /^\d+$/).test(raw)) {
+        return invalidParameter(param, `${param} must be a non-negative ${decimal ? 'number' : 'integer'}`);
+      }
+      const min = Number(raw);
+      if (min > 0) models = models.filter((m) => {
+        const value = read(m);
+        return value != null && value >= min;
+      });
     }
 
     const quantization = params.get('quantization');
     if (quantization) models = models.filter(m => (m.quantization || 'unknown') === quantization.toLowerCase());
 
-    const openWeights = params.get('open_weights');
-    if (openWeights === 'true') models = models.filter(m => m.open_weights === true);
-    if (openWeights === 'false') models = models.filter(m => m.open_weights === false);
-
-    if (params.get('cache_read') === 'true') models = models.filter(m => m.pricing?.cache_read != null);
-    if (params.get('cache_write') === 'true') models = models.filter(m => m.pricing?.cache_write != null);
-
-    const promo = params.get('promo');
-    if (promo === 'true') models = models.filter(m => m.discount > 0);
-    const zdr = params.get('zdr');
-    if (zdr === 'true') models = models.filter(m => m.zdr === true);
-    const sub = params.get('sub');
-    if (sub === 'true') models = models.filter(m => m.subscription === true);
-    const benchmarked = params.get('benchmarked');
-    if (benchmarked === 'true') models = models.filter(m => !!m.benchmarks);
+    // Boolean filters are strict. `=== 'true'` alone used to return the
+    // UNFILTERED catalog for a typo like zdr=1, so a client believed it had a
+    // filtered set. open_weights keeps its documented true|false semantics.
+    for (const [param, test] of [
+      ['zdr', (m) => m.zdr === true],
+      ['sub', (m) => m.subscription === true],
+      ['benchmarked', (m) => !!m.benchmarks],
+      ['cache_read', (m) => m.pricing?.cache_read != null],
+      ['cache_write', (m) => m.pricing?.cache_write != null],
+      ['promo', (m) => m.discount > 0],
+      ['open_weights', (m) => m.open_weights === true],
+    ]) {
+      const parsed = parseOptionalBoolean(params, param);
+      if (!parsed.ok) return invalidParameter(param, parsed.error);
+      if (parsed.value) models = models.filter(test);
+    }
+    if (params.get('open_weights') === 'false') models = models.filter((m) => m.open_weights === false);
 
     const search = params.get('search');
     if (search) {
@@ -740,10 +842,13 @@ export async function onRequestGet(context) {
     }
 
     // Sorting
-    const sort = params.get('sort') || 'id';
     const validSorts = ['id', 'input', 'output', 'cache_read', 'cache_write', 'context', 'max_output', 'uptime', 'discount', 'intelligence', 'coding', 'agentic'];
-    const sortKey = validSorts.includes(sort) ? sort : 'id';
-    const order = params.get('order') === 'desc' ? -1 : 1;
+    const sortParam = parseSort(params, validSorts);
+    if (!sortParam.ok) return sortParam.response;
+    const sortKey = sortParam.sort;
+    const orderParam = parseOrder(params);
+    if (!orderParam.ok) return orderParam.response;
+    const order = orderParam.order;
     models = [...models].sort((a, b) => {
       let va, vb;
       if (sortKey === 'id') { va = a.id.toLowerCase(); vb = b.id.toLowerCase(); }
@@ -765,7 +870,9 @@ export async function onRequestGet(context) {
     });
 
     // Pagination
-    const { total, offset, limit, paged } = paginate(models, params);
+    const page = paginationFor(params, models.length);
+    if (!page.ok) return page.response;
+    const { total, offset, limit, paged } = pageOf(models, page);
 
     return json({
       generated_at: pricing.generated_at,
@@ -784,7 +891,8 @@ export async function onRequestGet(context) {
       if (!res.ok) throw new Error(`image-pricing.json not found: ${res.status}`);
       imagePricing = await res.json();
     } catch (err) {
-      return json({ error: 'Failed to load image pricing data', detail: err.message }, 503);
+      console.error('Failed to load image pricing data:', err?.message || err);
+      return errorJson('catalog_unavailable', 'Failed to load image pricing data', 503);
     }
 
     const subPath = path.replace(/^images\//, '');
@@ -795,12 +903,12 @@ export async function onRequestGet(context) {
       try {
         requestedId = decodeURIComponent(subPath);
       } catch {
-        return json({ error: 'Invalid model id encoding' }, 400); // malformed %-encoding
+        return errorJson('invalid_parameter', 'Invalid model id encoding', 400); // malformed %-encoding
       }
       const target = canonicalId(requestedId);
       const model = findMediaModel(imagePricing.models, requestedId, target);
       if (!model) {
-        return json({ error: 'Image model not found', id: subPath }, 404);
+        return errorJson('model_not_found', 'Image model not found', 404, { id: subPath });
       }
       return json({
         generated_at: imagePricing.generated_at,
@@ -829,10 +937,13 @@ export async function onRequestGet(context) {
     }
 
     // Sorting
-    const sort = params.get('sort') || 'id';
-    const validSorts = ['id', 'org', 'provider'];
-    const sortKey = validSorts.includes(sort) ? sort : 'id';
-    const order = params.get('order') === 'desc' ? -1 : 1;
+    const mediaSorts = ['id', 'org', 'provider'];
+    const sortParam = parseSort(params, mediaSorts);
+    if (!sortParam.ok) return sortParam.response;
+    const sortKey = sortParam.sort;
+    const orderParam = parseOrder(params);
+    if (!orderParam.ok) return orderParam.response;
+    const order = orderParam.order;
     models = [...models].sort((a, b) => {
       const va = (a[sortKey] || '').toLowerCase();
       const vb = (b[sortKey] || '').toLowerCase();
@@ -841,7 +952,9 @@ export async function onRequestGet(context) {
       return 0;
     });
 
-    const { total, offset, limit, paged } = paginate(models, params);
+    const page = paginationFor(params, models.length);
+    if (!page.ok) return page.response;
+    const { total, offset, limit, paged } = pageOf(models, page);
 
     return json({
       generated_at: imagePricing.generated_at,
@@ -860,7 +973,8 @@ export async function onRequestGet(context) {
       if (!res.ok) throw new Error(`video-pricing.json not found: ${res.status}`);
       videoPricing = await res.json();
     } catch (err) {
-      return json({ error: 'Failed to load video pricing data', detail: err.message }, 503);
+      console.error('Failed to load video pricing data:', err?.message || err);
+      return errorJson('catalog_unavailable', 'Failed to load video pricing data', 503);
     }
 
     const subPath = path.replace(/^videos\//, '');
@@ -871,12 +985,12 @@ export async function onRequestGet(context) {
       try {
         requestedId = decodeURIComponent(subPath);
       } catch {
-        return json({ error: 'Invalid model id encoding' }, 400); // malformed %-encoding
+        return errorJson('invalid_parameter', 'Invalid model id encoding', 400); // malformed %-encoding
       }
       const target = canonicalId(requestedId);
       const model = findMediaModel(videoPricing.models, requestedId, target);
       if (!model) {
-        return json({ error: 'Video model not found', id: subPath }, 404);
+        return errorJson('model_not_found', 'Video model not found', 404, { id: subPath });
       }
       return json({
         generated_at: videoPricing.generated_at,
@@ -905,10 +1019,13 @@ export async function onRequestGet(context) {
     }
 
     // Sorting
-    const sort = params.get('sort') || 'id';
-    const validSorts = ['id', 'org', 'provider'];
-    const sortKey = validSorts.includes(sort) ? sort : 'id';
-    const order = params.get('order') === 'desc' ? -1 : 1;
+    const videoSorts = ['id', 'org', 'provider'];
+    const sortParam = parseSort(params, videoSorts);
+    if (!sortParam.ok) return sortParam.response;
+    const sortKey = sortParam.sort;
+    const orderParam = parseOrder(params);
+    if (!orderParam.ok) return orderParam.response;
+    const order = orderParam.order;
     models = [...models].sort((a, b) => {
       const va = (a[sortKey] || '').toLowerCase();
       const vb = (b[sortKey] || '').toLowerCase();
@@ -917,7 +1034,9 @@ export async function onRequestGet(context) {
       return 0;
     });
 
-    const { total, offset, limit, paged } = paginate(models, params);
+    const page = paginationFor(params, models.length);
+    if (!page.ok) return page.response;
+    const { total, offset, limit, paged } = pageOf(models, page);
 
     return json({
       generated_at: videoPricing.generated_at,
@@ -929,9 +1048,18 @@ export async function onRequestGet(context) {
   }
 
   // Unknown route
-  return json({ error: 'Not found', path }, 404);
+  return errorJson('not_found', 'Not found', 404);
 }
 
 export async function onRequestOptions() {
   return new Response(null, { headers: CORS_HEADERS });
+}
+
+/**
+ * HEAD mirrors GET headers without a body, so a monitor can check freshness
+ * (generated_at / ETag) without transferring the payload.
+ */
+export async function onRequestHead(context) {
+  const response = await onRequestGet(context);
+  return new Response(null, { status: response.status, headers: response.headers });
 }

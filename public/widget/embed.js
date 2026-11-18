@@ -25,6 +25,21 @@
     theme: 'auto',
   };
 
+  /** Attribute values are author-supplied, so a malformed one falls back to the
+   *  default locally instead of asking the API and rendering "API error: 400". */
+  function parseTokensAttr(value) {
+    var n = parseFloat(value);
+    return Number.isFinite(n) && n > 0 ? n : DEFAULTS.tokens;
+  }
+
+  function parseMixAttr(value) {
+    var parts = String(value || '').split(',').map(parseFloat);
+    var ok = parts.length === 3
+      && parts.every(function (n) { return Number.isFinite(n) && n >= 0; })
+      && Math.abs(parts[0] + parts[1] + parts[2] - 100) <= 0.5;
+    return ok ? value : DEFAULTS.mix;
+  }
+
   function getTheme(attr) {
     if (attr === 'dark') return 'dark';
     if (attr === 'light') return 'light';
@@ -93,8 +108,8 @@
 
   function renderWidget(target, data, tokens, mix) {
     var model = target.getAttribute('data-tw-model');
-    if (tokens === undefined) tokens = parseFloat(target.getAttribute('data-tw-tokens')) || DEFAULTS.tokens;
-    if (mix === undefined) mix = target.getAttribute('data-tw-mix') || DEFAULTS.mix;
+    if (tokens === undefined) tokens = parseTokensAttr(target.getAttribute('data-tw-tokens'));
+    if (mix === undefined) mix = parseMixAttr(target.getAttribute('data-tw-mix'));
     var theme = getTheme(target.getAttribute('data-tw-theme'));
     var c = STYLES[theme];
 
@@ -165,8 +180,8 @@
   async function fetchAndRender(target) {
     var model = target.getAttribute('data-tw-model');
     if (!model) return;
-    var tokens = parseFloat(target.getAttribute('data-tw-tokens')) || DEFAULTS.tokens;
-    var mix = target.getAttribute('data-tw-mix') || DEFAULTS.mix;
+    var tokens = parseTokensAttr(target.getAttribute('data-tw-tokens'));
+    var mix = parseMixAttr(target.getAttribute('data-tw-mix'));
 
     var url = API_BASE + '/' + model.split('/').map(encodeURIComponent).join('/') + '/providers?tokens=' + encodeURIComponent(tokens) + '&mix=' + encodeURIComponent(mix);
     try {
