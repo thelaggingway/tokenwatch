@@ -34,12 +34,22 @@ cp wrangler.d1.toml wrangler.toml
 # Apply migrations to the local (Wrangler .wrangler/state) D1 database.
 npx wrangler d1 migrations apply tokenwatch-price-history --local
 
-# Seed the local database from public/pricing.json for one UTC day.
+# Seed the local database from public/pricing.json for one UTC day...
 node scripts/snapshot-prices.mjs --local --date 2026-09-14
+
+# ...or several days with deterministic per-day variation (recommended when
+# testing the history chart: a single day is a flat, switch-free line).
+node scripts/snapshot-prices.mjs --local --seed-days 7 --vary
 
 # Serve the Pages app + Functions against that local database.
 npx wrangler pages dev public --port 8788
 ```
+
+`--seed-days` is local-only and refuses to run without `--local`; it never
+reaches remote D1. `wrangler pages dev --d1 ...` is **not** a substitute for the
+copied config: it binds a new empty database, so the history route answers 503
+with `no such table: price_snapshot`. See the README's "Local Pages Functions
+with D1 price history" section for the full workflow and the deploy hazard.
 
 `wrangler pages dev` reads `[[d1_databases]]` from the local `wrangler.toml`,
 so the Functions get `env.PRICE_HISTORY` pointed at `.wrangler/state/v3/d1`
@@ -137,3 +147,44 @@ node scripts/snapshot-prices.mjs --local --date <day> --force
 (`claimed_at`, `offering_count`, `source_generated_at`, `claim_token`) in the
 same transaction, so the claim always describes the snapshot that is actually
 stored. It affects that day only; no other day's claim is touched.
+
+## Advisor quota D1 setup (optional — NOT yet provisioned)
+
+`migrations-advisor/0001_advisor_quota.sql` adds `advisor_quota_usage`, which
+backs the advisor's daily quota. **Nothing here is provisioned or applied
+remotely.** It lives outside `migrations/` on purpose: `wrangler.history.toml`
+and `wrangler.d1.toml` set `migrations_dir = "migrations"`, so a file there would
+be applied to the price-history database on its next migration run.
+Until the owner performs the steps below, `functions/api/advisor.js` falls back
+to its per-isolate in-memory limiter, so the endpoint keeps working either way.
+
+- Table `advisor_quota_usage` — one row per `(ip_hash, utc_day)` holding the
+  `count` of charged model queries. `ip_hash` is SHA-256 of `"<salt>:<client
+  ip>"`; a raw client IP is never stored.
+- Binding name: `ADVISOR_QUOTA` (D1, optional in `env`).
+- Salt secret name: `ADVISOR_IP_SALT`. Without it the durable limiter is skipped
+  and a warning is logged, because an unsalted hash over the IPv4 space is
+  trivially brute-forceable.
+- Window: the UTC calendar day — at most 4 charged queries per client per day.
+
+Owner provisioning, after creating the database in the Cloudflare dashboard
+(D1 → Create database, suggested name `tokenwatch-advisor-quota`):
+
+```bash
+# 1. Bind it to the Pages project:
+#    Settings → Functions → D1 bindings → variable name ADVISOR_QUOTA.
+# 2. Create the table. No Wrangler config in this repo binds the advisor
+#    database, so name the target explicitly and confirm it is the right one
+#    (the SQL is idempotent: CREATE ... IF NOT EXISTS):
+npx --yes wrangler@4.147.0 d1 execute tokenwatch-advisor-quota --remote \
+  --file migrations-advisor/0001_advisor_quota.sql
+# 3. Create the salt and store it as an encrypted Pages variable:
+npx --yes wrangler@4.147.0 pages secret put ADVISOR_IP_SALT \
+  --project-name payg-inference-calculator
+# 4. Optional retention sweep, e.g. daily:
+#    DELETE FROM advisor_quota_usage WHERE utc_day < date('now', '-7 days');
+```
+
+The advisor schema is independent of the price-history migrations and belongs
+in its own database. Do not add the binding to `wrangler.d1.toml` or a local
+`wrangler.toml`; Pages bindings for this project are dashboard-managed.
