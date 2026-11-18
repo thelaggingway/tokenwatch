@@ -146,13 +146,13 @@ const RECOMMENDATION_COMMON = {
     minimum: 1,
     maximum: 100,
     default: 10,
-    description: 'Maximum rows per recommendation group. Unlike the list routes, an out-of-range value is a 400 rather than a silent clamp.',
+    description: 'Maximum rows per recommendation group (1–100), or at most 25 with `detail=full`. An out-of-range value is a 400 rather than a clamp.',
   },
   pretty: {
     type: 'string',
     enum: ['1', '0', 'true', 'false'],
     default: '0',
-    description: 'When `1` or `true`, indent the JSON. Responses are compact by default.',
+    description: 'When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag.',
   },
 };
 

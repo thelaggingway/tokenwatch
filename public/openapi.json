@@ -199,7 +199,7 @@
             "name": "limit",
             "in": "query",
             "required": false,
-            "description": "Maximum rows per recommendation group. Unlike the list routes, an out-of-range value is a 400 rather than a silent clamp.",
+            "description": "Maximum rows per recommendation group (1–100), or at most 25 with `detail=full`. An out-of-range value is a 400 rather than a clamp.",
             "schema": {
               "type": "integer",
               "minimum": 1,
@@ -211,7 +211,7 @@
             "name": "pretty",
             "in": "query",
             "required": false,
-            "description": "When `1` or `true`, indent the JSON. Responses are compact by default.",
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag.",
             "schema": {
               "type": "string",
               "enum": [
@@ -366,7 +366,7 @@
             "name": "limit",
             "in": "query",
             "required": false,
-            "description": "Maximum rows per recommendation group. Unlike the list routes, an out-of-range value is a 400 rather than a silent clamp.",
+            "description": "Maximum rows per recommendation group (1–100), or at most 25 with `detail=full`. An out-of-range value is a 400 rather than a clamp.",
             "schema": {
               "type": "integer",
               "minimum": 1,
@@ -378,7 +378,7 @@
             "name": "pretty",
             "in": "query",
             "required": false,
-            "description": "When `1` or `true`, indent the JSON. Responses are compact by default.",
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag.",
             "schema": {
               "type": "string",
               "enum": [
