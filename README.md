@@ -79,7 +79,7 @@ Parameters: `use_case` (required), `model` (required for `/recommend/providers`)
 3. **`scripts/fetch-videos.mjs`** fetches video generation models from OpenRouter plus fal.ai (Tier-1 precedence). Normalizes per-second pricing with resolution and audio variants. Writes `public/video-pricing.json` (~100 models).
 4. **`public/`** is a zero-dependency static site (HTML/CSS/JS) with Text/Image/Video calculators, a Benchmarks explorer and the Choose model finder, each loading its own JSON and computing in-browser. The Choose page (`public/choose/` + `choose-app.js`) runs the shared recommender engine (`shared/use-cases.mjs`, `shared/recommend.mjs`, `shared/choose-page.mjs`) client-side.
 5. **`functions/api/v1/`** provides a queryable API via Cloudflare Pages Functions for all three catalogs (text, image, video), plus the workload recommender (`/api/v1/use-cases`, `/api/v1/recommend`, `/api/v1/recommend/providers`).
-6. **`functions/api/advisor.js`** powers the on-site conversational AI Advisor (using Nemotron / InferX via OpenAI-compatible API) with dynamic knowledge base ingestion and edge rate-limiting (4 queries / 24h per IP).
+6. **`functions/api/advisor.js`** powers the on-site conversational AI Advisor (using Nemotron / InferX via OpenAI-compatible API) with dynamic knowledge base ingestion and a 4-queries-per-client-per-day quota. Requests are validated before quota is charged; the quota is durable when the optional `ADVISOR_QUOTA` D1 binding and `ADVISOR_IP_SALT` secret are provisioned, and falls back to a per-isolate in-memory limiter otherwise.
 7. **`scripts/build-advisor-knowledge.mjs`** builds `public/advisor-knowledge.json` joining live model pricing, benchmarks, and provider policy URLs for the advisor bot.
 8. **GitHub Actions** refreshes pricing + performance on a 2-hourly cron, commits updated JSON, and deploys to Cloudflare Pages.
 
@@ -247,6 +247,53 @@ npm run bust:cache
 ```
 
 Requires Node ≥18 (uses native `fetch`). No dependencies.
+
+### Local Pages Functions with D1 price history
+
+`npm run serve` serves the static site only — the `/api/*` Pages Functions are
+not executed, so `/api/v1/models/:id/history` cannot be exercised. To run the
+site the way Cloudflare does, use `wrangler pages dev` with a **local** D1
+database:
+
+```bash
+# 1. One-time: create the gitignored local binding config.
+cp wrangler.d1.toml wrangler.toml
+
+# 2. Apply migrations to the local (.wrangler/state) database.
+npx wrangler@4.147.0 d1 migrations apply tokenwatch-price-history --local
+
+# 3. Seed several UTC days of varied history (local only).
+node scripts/snapshot-prices.mjs --local --seed-days 7 --vary
+
+# 4. Serve the app and Functions against that database.
+npx wrangler@4.147.0 pages dev public --port 8788
+
+# 5. Before any deploy: remove the local config.
+rm wrangler.toml
+```
+
+`--seed-days N` writes the `N` days ending at `--date` (default: today), oldest
+first. It refuses to run without `--local`, and `--vary` scales each offering's
+input/output rate by a deterministic per-day factor so the chart shows real
+movement and provider switches instead of one repeated catalog. Re-running is
+safe: a day already claimed is left unchanged unless you pass `--force`. Neither
+flag is used by CI or the refresh workflow; production history is written one
+real day at a time.
+
+**The empty-database pitfall:** `wrangler pages dev --d1 PRICE_HISTORY=...`
+binds a *new empty* local database, not the one migrations and seeding wrote to,
+so history returns `503` with `D1_ERROR: no such table: price_snapshot`. The
+copied `wrangler.toml` is what points the Function at the migrated database.
+Without any binding at all the route returns `503` `Price history is not
+configured`, which is the intended behaviour for a deployment with no D1.
+
+**The deploy hazard:** Wrangler auto-discovers a root `wrangler.toml`,
+`wrangler.json`, or `wrangler.jsonc` and treats it as the source of truth for
+Pages bindings on every `wrangler pages deploy`. The copied file's placeholder
+`PRICE_HISTORY` database does not exist, so deploying with it present fails or
+binds a broken database to production. `scripts/check-no-local-wrangler.mjs`
+enforces this: CI runs it, and `scripts/deploy-pages.mjs` refuses to start while
+such a file exists.
 
 ## Project structure
 

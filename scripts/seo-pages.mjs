@@ -4,6 +4,8 @@ import { API_ENDPOINTS } from '../shared/api-meta.mjs';
 import { PRIORITY_PROVIDER_WEIGHTS, USE_CASES } from '../shared/use-cases.mjs';
 import { MIN_BENCHMARK_COVERAGE } from '../shared/recommend.mjs';
 import { modelDisplayName } from '../shared/choose-page.mjs';
+import { COMPONENT_SCHEMAS } from '../shared/openapi-schemas.mjs';
+import { PARAMETER_DOCS, PATH_PARAMETER_DOCS, RESPONSE_DOCS } from '../shared/openapi-params.mjs';
 
 export const SITE = 'https://tokenwatch.wyrdwerk.com';
 export const TOP_N = 25;
@@ -1257,9 +1259,29 @@ export function renderApiDocsPage() {
   const path = '/docs/api/';
   const description = 'Query TokenWatch text, image, video, provider, organization, catalog statistics, and workload-aware model recommendations through the public JSON API.';
   const rows = API_ENDPOINTS.map((endpoint) => `<tr><td><code>${esc(endpoint.path)}</code></td><td>${esc(endpoint.summary)}</td><td>${endpoint.params.length ? endpoint.params.map((param) => `<code>${esc(param)}</code>`).join(', ') : '—'}</td><td>${endpoint.sort.length ? endpoint.sort.map((sort) => `<code>${esc(sort)}</code>`).join(', ') : '—'}</td></tr>`).join('\n');
+  // Parameter semantics come from the same table the OpenAPI document uses, so
+  // the human page and the machine contract cannot describe different behaviour.
+  const paramSections = API_ENDPOINTS
+    .filter((endpoint) => endpoint.params.length > 0)
+    .map((endpoint) => {
+      const docs = PARAMETER_DOCS[endpoint.path] ?? {};
+      const items = endpoint.params.map((name) => {
+        const doc = docs[name];
+        // Descriptions use `backtick` markup for literals; HTML needs <code>.
+        const detail = doc?.description
+          ? ` — ${esc(doc.description).replace(/`([^`]+)`/g, '<code>$1</code>')}`
+          : '';
+        const shape = doc ? [doc.type, doc.default !== undefined ? `default ${doc.default}` : null].filter(Boolean).join(', ') : '';
+        const suffix = doc?.enum   // closed set rendered inline for scanning
+          ? ` (${doc.enum.map((value) => `<code>${esc(value)}</code>`).join(', ')})`
+          : '';
+        return `<li><code>${esc(name)}</code>${endpoint.requiredParams?.includes(name) ? ' <strong>(required)</strong>' : ''}${shape ? ` <em>${esc(shape)}</em>` : ''}${suffix}${detail}</li>`;
+      }).join('\n          ');
+      return `        <h3><code>${esc(endpoint.path)}</code></h3>\n        <ul>\n          ${items}\n        </ul>`;
+    }).join('\n');
   const body = `    <article class="seo-prose">
       <h2>Public JSON API</h2>
-      <p>All endpoints accept GET requests and return JSON with permissive CORS headers. List endpoints paginate with <code>limit</code> and <code>offset</code>; the limit is clamped to 1–500 and defaults to 100. A machine-readable <a href="/openapi.json">OpenAPI 3.1 description</a> is also available.</p>
+      <p>All endpoints accept GET requests and return JSON with permissive CORS headers. List endpoints paginate with <code>limit</code> and <code>offset</code>; the limit is clamped to 1–500 and defaults to 100. Malformed parameters return 400 with a stable <code>code</code>. Successful responses are compact JSON (add <code>pretty=1</code> to indent), cacheable for five minutes, and carry an <code>ETag</code>, so a request with <code>If-None-Match</code> returns 304 when nothing changed. A machine-readable <a href="/openapi.json">OpenAPI 3.1 description</a> is also available.</p>
       <p>Recommendation mixes are assumed workload defaults, not claims about your traffic. Model picks include best quality, best value, and the cheapest model above an absolute quality floor; explanations label benchmark coverage, provider ranking, missing signals, and confidence. Provider ranking requires confirmed capability and context metadata and keeps unverified options separate.</p>
       <p>For <code>chat-assistant</code> and <code>creative-writing</code>, <code>/api/v1/recommend</code> also returns <code>preference</code> separately from model picks: the Arena favorite, board, rating, eligible providers, and <code>source</code> metadata with linked dataset, rating date, attribution, and CC BY 4.0 license. Creative writing is preference-led; chat picks remain capability-ranked. The source metadata lets API consumers display the required attribution alongside Arena ratings.</p>
       <p>Recommendation responses default to compact candidate groups (up to 10 rows each, with total counts) and full explanations on the three model picks. Provider results keep full explanations on the top three. Add <code>detail=full</code> to expand explanations for returned rows, or set <code>limit=1..100</code> to change each group cap. Recommendation JSON is compact (no indentation); add <code>pretty=1</code> for indented output.</p>
@@ -1275,6 +1297,9 @@ export function renderApiDocsPage() {
         <li><code>detail</code>: <code>compact</code> (default) or <code>full</code>; <code>limit</code>: rows per group, 1–100 (default 10); <code>pretty=1</code>: indented JSON.</li>
       </ul>
       <div class="table-wrap"><table><caption>TokenWatch API endpoints</caption><thead><tr><th scope="col">Endpoint</th><th scope="col">Response</th><th scope="col">Query parameters</th><th scope="col">Sort values</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <h2 id="parameter-reference">Parameter reference</h2>
+      <p>Every parameter below is documented with its type, default and the behaviour you should expect, including the cases where a value is accepted but has no effect. Prices in responses are USD per million tokens, and an unknown price or timestamp is <code>null</code> — never <code>0</code> and never "free". The same descriptions are published as JSON Schemas and parameter objects in the <a href="/openapi.json">OpenAPI 3.1 document</a>, including <code>components.schemas</code> for model rows, provider offerings, price history, recommendations and errors.</p>
+${paramSections}
       <h2>Examples</h2>
       <pre><code>curl '${SITE}/api/v1/models?provider=aster&amp;sort=input&amp;limit=20'
 curl '${SITE}/api/v1/models?open_weights=true&amp;limit=20'
@@ -1301,86 +1326,90 @@ curl '${SITE}/api/v1/videos?provider=fal&amp;limit=25'</code></pre>
   });
 }
 
-const BOOLEAN_API_PARAMS = new Set(['cache_read', 'cache_write', 'promo', 'zdr', 'sub', 'benchmarked', 'open_weights', 'include_proprietary']);
-const INTEGER_API_PARAMS = new Set(['limit', 'offset']);
-const NUMBER_API_PARAMS = new Set(['min_context', 'min_output', 'min_intelligence', 'tokens']);
+/** Preset tables whose keys are the accepted values, keyed by `enumFrom`. */
+const OPENAPI_ENUM_SOURCES = {
+  use_case: Object.keys(USE_CASES),
+  priority: Object.keys(PRIORITY_PROVIDER_WEIGHTS),
+};
 
-function openApiParameter(name, required = false, parameterLimits = {}) {
-  let schema = BOOLEAN_API_PARAMS.has(name)
-    ? { type: 'boolean' }
-    : INTEGER_API_PARAMS.has(name)
-      ? { type: 'integer', minimum: name === 'limit' ? 1 : 0, maximum: name === 'limit' ? (parameterLimits.limit ?? 500) : undefined }
-      : NUMBER_API_PARAMS.has(name)
-        ? { type: 'number', minimum: 0 }
-        : { type: 'string' };
-  if (name === 'use_case') schema = { type: 'string', enum: Object.keys(USE_CASES) };
-  if (name === 'priority') schema = { type: 'string', enum: Object.keys(PRIORITY_PROVIDER_WEIGHTS) };
-  if (name === 'exclude_hq') schema = { type: 'string', pattern: '^[A-Za-z]{2}(,[A-Za-z]{2})*$' };
-  if (name === 'detail') schema = { type: 'string', enum: ['compact', 'full'], default: 'compact' };
-  if (name === 'pretty') schema = { type: 'string', enum: ['1', '0', 'true', 'false'], default: '0' };
-  if (name === 'limit' && parameterLimits.limit) schema.default = 10;
-  if (schema.maximum === undefined) delete schema.maximum;
+/** Map one documented parameter onto its JSON Schema fragment. */
+function openApiParameterSchema(doc) {
+  const schema = { type: doc.nullable ? [doc.type, 'null'] : doc.type };
+  const derived = doc.enumFrom ? OPENAPI_ENUM_SOURCES[doc.enumFrom] : undefined;
+  if (derived) schema.enum = [...derived];
+  else if (doc.enum) schema.enum = [...doc.enum];
+  if (doc.minimum !== undefined) schema.minimum = doc.minimum;
+  if (doc.maximum !== undefined) schema.maximum = doc.maximum;
+  if (doc.pattern) schema.pattern = doc.pattern;
+  if (doc.default !== undefined) schema.default = doc.default;
+  return schema;
+}
+
+/**
+ * `bodySchemaRef` is the component name for the 200 response. Unregistered
+ * paths and parameters still generate a valid document; test/generate-seo.test.mjs
+ * asserts the registry and the documentation stay complete, so an omission
+ * fails CI instead of silently publishing filler.
+ */
+function openApiParameter(name, { required = false, doc, in: location = 'query' } = {}) {
+  const documented = doc ?? {
+    type: 'string',
+    description: `Undocumented ${location} parameter: ${name}.`,
+  };
   return {
     name,
-    in: 'query',
+    in: location,
     required,
-    description: name === 'mix'
-      ? 'Comma-separated input, cached-input, and output percentages.'
-      : name === 'open_weights'
-        ? 'Filter to models with resolved open_weights=true or false; unknown statuses are excluded.'
-        : name === 'use_case'
-          ? 'Required workload preset id. See /api/v1/use-cases for assumed mixes, weights, requirements, and quality floors.'
-          : name === 'priority'
-            ? 'Provider-rank weighting preset; defaults to balanced.'
-            : name === 'exclude_hq'
-              ? 'Comma-separated two-letter headquarters country codes to exclude; providers with unknown headquarters are not excluded.'
-              : name === 'include_proprietary'
-                ? 'Include models not confirmed open-weight; defaults to false for model recommendations.'
-                : name === 'model'
-                  ? 'Required canonical model id. An unknown model returns 404.'
-                  : name === 'zdr'
-                    ? 'Set to true to keep only offerings or providers marked zero data retention.'
-                  : name === 'pretty'
-                    ? 'Set to 1 for indented JSON; responses are compact (unindented) by default.'
-                  : name === 'detail'
-                    ? 'Defaults to compact; full returns explanations for all returned rows.'
-                    : name === 'limit'
-                      ? parameterLimits.limit
-                        ? `Maximum rows per recommendation group; defaults to 10 (range 1–${parameterLimits.limit}).`
-                        : 'Page size; defaults to 100 and is clamped to 1–500.'
-                  : `Filter or control parameter: ${name}.`,
-    schema,
+    description: documented.description,
+    schema: openApiParameterSchema(documented),
   };
 }
+
+/** Component schema reference for a JSON body. */
+const openApiSchemaRef = (name) => ({ $ref: `#/components/schemas/${name}` });
 
 /** Build the published API contract from the endpoint metadata that powers the docs and API directory. */
 export function buildOpenApiDocument() {
   const paths = {};
   for (const endpoint of API_ENDPOINTS) {
     const path = endpoint.path.replace(/:([A-Za-z][A-Za-z0-9_]*)/g, '{$1}');
-    const pathParams = [...endpoint.path.matchAll(/:([A-Za-z][A-Za-z0-9_]*)/g)].map((match) => ({
-      name: match[1],
-      in: 'path',
-      required: true,
-      description: `Canonical resource identifier: ${match[1]}.`,
-      schema: { type: 'string' },
-    }));
+    const pathParams = [...endpoint.path.matchAll(/:([A-Za-z][A-Za-z0-9_]*)/g)].map((match) =>
+      openApiParameter(match[1], { required: true, doc: PATH_PARAMETER_DOCS[match[1]], in: 'path' }));
+    const queryDocs = PARAMETER_DOCS[endpoint.path] ?? {};
+    const response = RESPONSE_DOCS[endpoint.path];
     paths[path] = {
       get: {
         summary: endpoint.summary,
         ...(endpoint.description ? { description: endpoint.description } : {}),
         operationId: `get${endpoint.path.split('/').filter(Boolean).map((segment) => segment.replace(/^:/, '').split(/[^A-Za-z0-9]+/).filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join('')).join('') || 'ApiDirectory'}`,
-        parameters: [...pathParams, ...endpoint.params.map((name) => openApiParameter(name, endpoint.requiredParams?.includes(name) === true, endpoint.parameterLimits))],
+        parameters: [
+          ...pathParams,
+          ...endpoint.params.map((name) => openApiParameter(name, {
+            required: endpoint.requiredParams?.includes(name) === true,
+            doc: queryDocs[name],
+          })),
+        ],
         responses: {
           200: {
-            description: endpoint.path === '/api/v1/recommend'
-              ? 'Successful JSON response. Chat and creative-writing include Arena preference.favorite and source attribution/date/license metadata in preference.source.'
-              : 'Successful JSON response.',
-            content: { 'application/json': { schema: { type: 'object' } } },
+            description: response?.description ?? 'Successful JSON response.',
+            content: {
+              'application/json': {
+                schema: response ? openApiSchemaRef(response.schema) : { type: 'object' },
+              },
+            },
           },
-          400: { description: 'Invalid request parameter or malformed model ID.', content: { 'application/json': { schema: { type: 'object' } } } },
-          404: { description: 'Unknown API route or resource.', content: { 'application/json': { schema: { type: 'object' } } } },
-          503: { description: 'A required catalog asset is unavailable.', content: { 'application/json': { schema: { type: 'object' } } } },
+          400: {
+            description: 'Invalid request parameter, malformed model ID encoding, or an out-of-range value the route validates strictly.',
+            content: { 'application/json': { schema: openApiSchemaRef('Error') } },
+          },
+          404: {
+            description: 'Unknown API route, or a model id that does not resolve in the catalog.',
+            content: { 'application/json': { schema: openApiSchemaRef('Error') } },
+          },
+          503: {
+            description: 'A required catalog asset or the price-history database is unavailable.',
+            content: { 'application/json': { schema: openApiSchemaRef('Error') } },
+          },
         },
       },
     };
@@ -1390,10 +1419,11 @@ export function buildOpenApiDocument() {
     info: {
       title: 'TokenWatch Pricing API',
       version: 'v1',
-      description: 'Read-only, public JSON API for TokenWatch text, image, video, provider, organization, pricing catalog data, and workload-aware recommendations.',
+      description: 'Read-only, public JSON API for TokenWatch text, image, video, provider, organization, pricing catalog data, and workload-aware recommendations. Prices are USD per million tokens unless a response says otherwise, and every unknown value is null rather than zero.',
     },
     servers: [{ url: SITE }],
     paths,
+    components: { schemas: COMPONENT_SCHEMAS },
   };
 }
 

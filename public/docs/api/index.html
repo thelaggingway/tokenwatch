@@ -35,7 +35,7 @@
     <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Text pricing</a><span aria-hidden="true">/</span><a href="/docs/api/">API documentation</a></nav>
     <article class="seo-prose">
       <h2>Public JSON API</h2>
-      <p>All endpoints accept GET requests and return JSON with permissive CORS headers. List endpoints paginate with <code>limit</code> and <code>offset</code>; the limit is clamped to 1–500 and defaults to 100. A machine-readable <a href="/openapi.json">OpenAPI 3.1 description</a> is also available.</p>
+      <p>All endpoints accept GET requests and return JSON with permissive CORS headers. List endpoints paginate with <code>limit</code> and <code>offset</code>; the limit is clamped to 1–500 and defaults to 100. Malformed parameters return 400 with a stable <code>code</code>. Successful responses are compact JSON (add <code>pretty=1</code> to indent), cacheable for five minutes, and carry an <code>ETag</code>, so a request with <code>If-None-Match</code> returns 304 when nothing changed. A machine-readable <a href="/openapi.json">OpenAPI 3.1 description</a> is also available.</p>
       <p>Recommendation mixes are assumed workload defaults, not claims about your traffic. Model picks include best quality, best value, and the cheapest model above an absolute quality floor; explanations label benchmark coverage, provider ranking, missing signals, and confidence. Provider ranking requires confirmed capability and context metadata and keeps unverified options separate.</p>
       <p>For <code>chat-assistant</code> and <code>creative-writing</code>, <code>/api/v1/recommend</code> also returns <code>preference</code> separately from model picks: the Arena favorite, board, rating, eligible providers, and <code>source</code> metadata with linked dataset, rating date, attribution, and CC BY 4.0 license. Creative writing is preference-led; chat picks remain capability-ranked. The source metadata lets API consumers display the required attribution alongside Arena ratings.</p>
       <p>Recommendation responses default to compact candidate groups (up to 10 rows each, with total counts) and full explanations on the three model picks. Provider results keep full explanations on the top three. Add <code>detail=full</code> to expand explanations for returned rows, or set <code>limit=1..100</code> to change each group cap. Recommendation JSON is compact (no indentation); add <code>pretty=1</code> for indented output.</p>
@@ -66,6 +66,86 @@
 <tr><td><code>/api/v1/images/:id</code></td><td>Return one image model with its pricing variants</td><td>—</td><td>—</td></tr>
 <tr><td><code>/api/v1/videos</code></td><td>List video-generation models</td><td><code>org</code>, <code>provider</code>, <code>search</code>, <code>sort</code>, <code>order</code>, <code>limit</code>, <code>offset</code></td><td><code>id</code>, <code>org</code>, <code>provider</code></td></tr>
 <tr><td><code>/api/v1/videos/:id</code></td><td>Return one video model with its pricing variants</td><td>—</td><td>—</td></tr></tbody></table></div>
+      <h2 id="parameter-reference">Parameter reference</h2>
+      <p>Every parameter below is documented with its type, default and the behaviour you should expect, including the cases where a value is accepted but has no effect. Prices in responses are USD per million tokens, and an unknown price or timestamp is <code>null</code> — never <code>0</code> and never "free". The same descriptions are published as JSON Schemas and parameter objects in the <a href="/openapi.json">OpenAPI 3.1 document</a>, including <code>components.schemas</code> for model rows, provider offerings, price history, recommendations and errors.</p>
+        <h3><code>/api/v1/recommend</code></h3>
+        <ul>
+          <li><code>use_case</code> <strong>(required)</strong> <em>string</em> — Workload preset id. See <code>/api/v1/use-cases</code> for each preset's assumed mix, weights, requirements and quality floor.</li>
+          <li><code>priority</code> <em>string, default balanced</em> — Provider-ranking weights. <code>balanced</code> uses the use case defaults; the others re-weight price, time-to-first-token, throughput and uptime.</li>
+          <li><code>zdr</code> <em>boolean</em> — When <code>true</code>, only providers marked zero data retention are eligible.</li>
+          <li><code>exclude_hq</code> <em>string</em> — Comma-separated ISO 3166-1 alpha-2 headquarters country codes to exclude. Providers with unknown headquarters are kept, not excluded. A code that is not a real country code is a 400.</li>
+          <li><code>include_proprietary</code> <em>boolean, default false</em> — When <code>true</code>, also consider models not confirmed open-weight. Defaults to open-weight models only.</li>
+          <li><code>detail</code> <em>string, default compact</em> (<code>compact</code>, <code>full</code>) — <code>compact</code> returns summary rows with total counts; <code>full</code> adds explanations and per-provider detail to every returned row, which enlarges the payload by orders of magnitude.</li>
+          <li><code>limit</code> <em>integer, default 10</em> — Maximum rows per recommendation group (1–100), or at most 25 with <code>detail=full</code>. An out-of-range value is a 400 rather than a clamp.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag.</li>
+        </ul>
+        <h3><code>/api/v1/recommend/providers</code></h3>
+        <ul>
+          <li><code>use_case</code> <strong>(required)</strong> <em>string</em> — Workload preset id. See <code>/api/v1/use-cases</code> for each preset's assumed mix, weights, requirements and quality floor.</li>
+          <li><code>model</code> <strong>(required)</strong> <em>string</em> — Canonical model id from the catalog. Org prefixes, case and version suffixes are normalized, so <code>openai/gpt-5</code> and <code>gpt-5</code> resolve alike. An unknown id returns 404.</li>
+          <li><code>priority</code> <em>string, default balanced</em> — Provider-ranking weights. <code>balanced</code> uses the use case defaults; the others re-weight price, time-to-first-token, throughput and uptime.</li>
+          <li><code>zdr</code> <em>boolean</em> — When <code>true</code>, only providers marked zero data retention are eligible.</li>
+          <li><code>exclude_hq</code> <em>string</em> — Comma-separated ISO 3166-1 alpha-2 headquarters country codes to exclude. Providers with unknown headquarters are kept, not excluded. A code that is not a real country code is a 400.</li>
+          <li><code>include_proprietary</code> <em>boolean, default false</em> — When <code>true</code>, also rank providers of models not confirmed open-weight. Without it a closed model ranks no providers and returns an explanatory <code>message</code>.</li>
+          <li><code>detail</code> <em>string, default compact</em> (<code>compact</code>, <code>full</code>) — <code>compact</code> returns summary rows with total counts; <code>full</code> adds explanations and per-provider detail to every returned row, which enlarges the payload by orders of magnitude.</li>
+          <li><code>limit</code> <em>integer, default 10</em> — Maximum rows per recommendation group (1–100), or at most 25 with <code>detail=full</code>. An out-of-range value is a 400 rather than a clamp.</li>
+          <li><code>pretty</code> <em>string, default 0</em> (<code>1</code>, <code>0</code>, <code>true</code>, <code>false</code>) — When <code>1</code> or <code>true</code>, indent the JSON. Every data route returns compact JSON by default and honours this flag.</li>
+        </ul>
+        <h3><code>/api/v1/models</code></h3>
+        <ul>
+          <li><code>org</code> <em>string</em> — Exact organization slug, matched case-insensitively against <code>model.org</code>.</li>
+          <li><code>provider</code> <em>string</em> — Exact provider slug, matched case-insensitively against <code>model.provider</code>.</li>
+          <li><code>min_context</code> <em>integer</em> — Keep offerings whose context window is at least this many tokens. Offerings with an unknown context window are excluded.</li>
+          <li><code>min_output</code> <em>integer</em> — Keep offerings whose maximum completion tokens are at least this value. Unknown maximums are excluded.</li>
+          <li><code>min_intelligence</code> <em>number</em> — Keep offerings whose benchmark <code>intelligence_index</code> is at least this value (decimals allowed, e.g. <code>45.5</code>). Unbenchmarked offerings are excluded; <code>0</code> disables the filter. Negative or non-numeric values are a 400.</li>
+          <li><code>quantization</code> <em>string</em> — Exact quantization label such as <code>fp8</code>, <code>fp4</code>, <code>nvfp4</code>, <code>bf16</code> or <code>unknown</code>, matched case-insensitively.</li>
+          <li><code>open_weights</code> <em>boolean</em> — Keep offerings with a resolved open-weight status of <code>true</code> or <code>false</code>. Unknown statuses are excluded from both, and <code>null</code> matches neither.</li>
+          <li><code>cache_read</code> <em>boolean</em> — When <code>true</code>, keep only offerings that publish a cache-read tariff.</li>
+          <li><code>cache_write</code> <em>boolean</em> — When <code>true</code>, keep only offerings that publish a cache-write tariff.</li>
+          <li><code>promo</code> <em>boolean</em> — When <code>true</code>, keep only promotional offerings (<code>discount &gt; 0</code>). A structural price has <code>discount: 0</code>.</li>
+          <li><code>zdr</code> <em>boolean</em> — When <code>true</code>, keep only offerings from a provider marked zero data retention.</li>
+          <li><code>sub</code> <em>boolean</em> — When <code>true</code>, keep only offerings available through a subscription plan.</li>
+          <li><code>benchmarked</code> <em>boolean</em> — When <code>true</code>, keep only offerings carrying a benchmark sidecar.</li>
+          <li><code>search</code> <em>string</em> — Case-insensitive substring match across model id, display name, org and provider.</li>
+          <li><code>sort</code> <em>string, default id</em> (<code>id</code>, <code>input</code>, <code>output</code>, <code>cache_read</code>, <code>cache_write</code>, <code>context</code>, <code>max_output</code>, <code>uptime</code>, <code>discount</code>, <code>intelligence</code>, <code>coding</code>, <code>agentic</code>) — Sort key. Prices are USD per million tokens; <code>context</code>, <code>max_output</code> and <code>uptime</code> are offering metrics; <code>intelligence</code>, <code>coding</code> and <code>agentic</code> are benchmark indices. Null values sort last in both directions. An unknown key is a 400 listing the valid keys.</li>
+          <li><code>order</code> <em>string, default asc</em> (<code>asc</code>, <code>desc</code>) — Sort direction, case-insensitive (<code>DESC</code> works). Any other value is a 400.</li>
+          <li><code>limit</code> <em>integer, default 100</em> — Page size, a positive integer. Values above 500 are clamped to 500 and the response <code>limit</code> reports the applied value; 0, negative, fractional or non-numeric values are a 400.</li>
+          <li><code>offset</code> <em>integer, default 0</em> — Zero-based index of the first row, a non-negative integer; anything else is a 400. An offset past the end returns an empty page with an honest <code>total</code>.</li>
+        </ul>
+        <h3><code>/api/v1/models/:canonicalId/providers</code></h3>
+        <ul>
+          <li><code>tokens</code> <em>number</em> — Positive token count. It scales the cost figure only and never changes the order; zero, negative or non-numeric values are a 400.</li>
+          <li><code>mix</code> <em>string</em> — Comma-separated input, cached-input, output percentages used to blend each offering's rates. Must sum to 100, validated like <code>/history</code>. When present, offerings sort by the blended rate at this mix with unpriceable offerings last; <code>tokens</code> is not required. Without it, offerings sort by <code>input + output</code>, unpriced offerings last.</li>
+        </ul>
+        <h3><code>/api/v1/models/:canonicalId/history</code></h3>
+        <ul>
+          <li><code>days</code> <em>integer, default 90</em> — Window length in days, today inclusive. Values outside 1-90 or non-numeric return 400.</li>
+          <li><code>mix</code> <em>string</em> — Three percentages (fresh input, cached input, output) summing to 100 ±0.5, blended at read time against the stored raw tariffs. Malformed mixes return 400. Defaults to the agentic mix 2.5, 97, 0.5.</li>
+        </ul>
+        <h3><code>/api/v1/providers</code></h3>
+        <ul>
+          <li><code>zdr</code> <em>boolean</em> — When <code>true</code>, keep only providers whose metadata says <code>retains_prompts: false</code>.</li>
+        </ul>
+        <h3><code>/api/v1/images</code></h3>
+        <ul>
+          <li><code>org</code> <em>string</em> — Exact organization slug, matched case-insensitively.</li>
+          <li><code>provider</code> <em>string</em> — Exact provider slug, matched case-insensitively.</li>
+          <li><code>search</code> <em>string</em> — Case-insensitive substring match across id, name, org and provider.</li>
+          <li><code>sort</code> <em>string, default id</em> (<code>id</code>, <code>org</code>, <code>provider</code>) — Sort key, compared case-insensitively. An unknown key is a 400 listing the valid keys.</li>
+          <li><code>order</code> <em>string, default asc</em> (<code>asc</code>, <code>desc</code>) — Sort direction, case-insensitive (<code>DESC</code> works). Any other value is a 400.</li>
+          <li><code>limit</code> <em>integer, default 100</em> — Page size, a positive integer. Values above 500 are clamped to 500 and the response <code>limit</code> reports the applied value; 0, negative, fractional or non-numeric values are a 400.</li>
+          <li><code>offset</code> <em>integer, default 0</em> — Zero-based index of the first row, a non-negative integer; anything else is a 400. An offset past the end returns an empty page with an honest <code>total</code>.</li>
+        </ul>
+        <h3><code>/api/v1/videos</code></h3>
+        <ul>
+          <li><code>org</code> <em>string</em> — Exact organization slug, matched case-insensitively.</li>
+          <li><code>provider</code> <em>string</em> — Exact provider slug, matched case-insensitively.</li>
+          <li><code>search</code> <em>string</em> — Case-insensitive substring match across id, name, org and provider.</li>
+          <li><code>sort</code> <em>string, default id</em> (<code>id</code>, <code>org</code>, <code>provider</code>) — Sort key, compared case-insensitively. An unknown key is a 400 listing the valid keys.</li>
+          <li><code>order</code> <em>string, default asc</em> (<code>asc</code>, <code>desc</code>) — Sort direction, case-insensitive (<code>DESC</code> works). Any other value is a 400.</li>
+          <li><code>limit</code> <em>integer, default 100</em> — Page size, a positive integer. Values above 500 are clamped to 500 and the response <code>limit</code> reports the applied value; 0, negative, fractional or non-numeric values are a 400.</li>
+          <li><code>offset</code> <em>integer, default 0</em> — Zero-based index of the first row, a non-negative integer; anything else is a 400. An offset past the end returns an empty page with an honest <code>total</code>.</li>
+        </ul>
       <h2>Examples</h2>
       <pre><code>curl 'https://tokenwatch.wyrdwerk.com/api/v1/models?provider=aster&amp;sort=input&amp;limit=20'
 curl 'https://tokenwatch.wyrdwerk.com/api/v1/models?open_weights=true&amp;limit=20'

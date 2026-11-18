@@ -29,6 +29,8 @@
   Cache-Control: public, max-age=0, must-revalidate
 /choose-app.js
   Cache-Control: public, max-age=0, must-revalidate
+/advisor-widget.js
+  Cache-Control: public, max-age=0, must-revalidate
 /shared/*
   Cache-Control: public, max-age=0, must-revalidate
 /share-snapshot.mjs
