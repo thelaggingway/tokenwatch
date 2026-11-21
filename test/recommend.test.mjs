@@ -207,10 +207,25 @@ test('LiveBench-thin use cases use AA intelligence for the absolute floor', () =
       supported_parameters: ['structured_outputs'],
       benchmarks: { intelligence_index: 15.1 },
     }),
+    // A LiveBench-scored peer makes the aa-only model's missing LiveBench a real gap.
+    mixOffering('open/livebench-peer', 'structured-provider', 20, 5, {
+      supported_parameters: ['structured_outputs'],
+      benchmarks: { intelligence_index: 20, livebench_instruction_following: 60, livebench_data_analysis: 60 },
+    }),
   ]);
   assert.equal(result.cheapestAboveFloor.id, 'aa-only');
   assert.equal(result.cheapestAboveFloor.group, 'partiallyBenchmarked');
   assert.ok(result.cheapestAboveFloor.reasons.some((reason) => /intelligence_index.*absolute floor of 15/i.test(reason)));
+});
+
+test('a benchmark no candidate reports does not cap quality coverage', () => {
+  // AA stopped publishing coding_index and agentic_index; agentic-coding must still pick.
+  const result = shortlistModels('agentic-coding', [
+    mixOffering('open/strong', 'alpha', 60, 4, { benchmarks: { intelligence_index: 60, livebench_agentic_coding: 50 } }),
+    mixOffering('open/weak', 'beta', 30, 1, { benchmarks: { intelligence_index: 30, livebench_agentic_coding: 20 } }),
+  ]);
+  assert.equal(result.bestQuality?.id, 'strong');
+  assert.equal(result.partiallyBenchmarked.length, 0);
 });
 
 test('cheapest-above-floor explains when it costs more than bestValue', () => {
