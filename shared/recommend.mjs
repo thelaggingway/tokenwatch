@@ -278,11 +278,15 @@ function scoreModelCandidates(groups, benchmarks, useCase) {
     group.metrics = result.metrics;
     group.metricSources = result.sources;
   }
-  const totalWeight = Object.values(useCase.benchmarkWeights).reduce((sum, weight) => sum + weight, 0);
   const valuesByField = {};
   for (const field of Object.keys(useCase.benchmarkWeights)) {
     valuesByField[field] = groups.map((group) => group.metrics[field]).filter(finite).sort((a, b) => a - b);
   }
+  // A field no candidate reports (e.g. AA retired its coding/agentic indices) is an
+  // absent source, not a per-model gap, so it must not cap everyone's coverage.
+  const totalWeight = Object.entries(useCase.benchmarkWeights)
+    .filter(([field]) => valuesByField[field].length)
+    .reduce((sum, [, weight]) => sum + weight, 0);
 
   for (const group of groups) {
     const weightedScores = [];
