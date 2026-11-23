@@ -1,8 +1,8 @@
 {
   "_meta": {
-    "fetched_at": "2026-11-16T16:57:04.277Z",
+    "fetched_at": "2026-11-23T17:05:37.961Z",
     "source": "artificialanalysis.ai/api/v2/language/models/free",
-    "count": 98
+    "count": 116
   },
   "models": [
     {
@@ -42,6 +42,12 @@
       "agentic_index": null
     },
     {
+      "slug": "gemini-4-neon-low",
+      "intelligence_index": 44.1,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
       "slug": "granite-4-2-3b",
       "intelligence_index": 4.7,
       "coding_index": null,
@@ -68,6 +74,18 @@
     {
       "slug": "inkling",
       "intelligence_index": 12.5,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "granite-4-2-30b",
+      "intelligence_index": 5.5,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "k2-horizon-7b",
+      "intelligence_index": 10.6,
       "coding_index": null,
       "agentic_index": null
     },
@@ -156,8 +174,26 @@
       "agentic_index": null
     },
     {
+      "slug": "gpt-6-2-sol-xhigh",
+      "intelligence_index": 55.7,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
       "slug": "nemotron-3-5-lightning",
       "intelligence_index": 5.5,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "lfm3-vl-2b",
+      "intelligence_index": 1.7,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "gemini-4-neon-medium",
+      "intelligence_index": 54.9,
       "coding_index": null,
       "agentic_index": null
     },
@@ -176,6 +212,12 @@
     {
       "slug": "claude-opus-5-5",
       "intelligence_index": 59.1,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "k2-horizon-3-7b",
+      "intelligence_index": 8,
       "coding_index": null,
       "agentic_index": null
     },
@@ -282,6 +324,12 @@
       "agentic_index": null
     },
     {
+      "slug": "k2-horizon-mova-36b-a4b",
+      "intelligence_index": 13.8,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
       "slug": "deepseek-v4-1-flash-1017-non-reasoning",
       "intelligence_index": 18.5,
       "coding_index": null,
@@ -290,6 +338,12 @@
     {
       "slug": "muse-glimmer",
       "intelligence_index": 6.3,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "gpt-6-2-astra-xhigh",
+      "intelligence_index": 61.6,
       "coding_index": null,
       "agentic_index": null
     },
@@ -314,6 +368,12 @@
     {
       "slug": "nvidia-nemotron-3-ultra-550b-a55b",
       "intelligence_index": 11.8,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "joyai-vl",
+      "intelligence_index": 28,
       "coding_index": null,
       "agentic_index": null
     },
@@ -360,6 +420,12 @@
       "agentic_index": null
     },
     {
+      "slug": "gpt-6-2-astra",
+      "intelligence_index": 62.1,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
       "slug": "claude-fable-5-2-xhigh",
       "intelligence_index": 62.2,
       "coding_index": null,
@@ -368,6 +434,12 @@
     {
       "slug": "muse-ember-xhigh",
       "intelligence_index": 34.1,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "gemini-4-neon",
+      "intelligence_index": 61.4,
       "coding_index": null,
       "agentic_index": null
     },
@@ -390,6 +462,18 @@
       "agentic_index": null
     },
     {
+      "slug": "a-x-k2",
+      "intelligence_index": 9,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "gpt-6-2-sol-medium",
+      "intelligence_index": 52.7,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
       "slug": "deepseek-v4-pro",
       "intelligence_index": 23.1,
       "coding_index": null,
@@ -404,6 +488,18 @@
     {
       "slug": "gemini-3-8-flash",
       "intelligence_index": 30.8,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "gpt-6-2-astra-medium",
+      "intelligence_index": 57,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "k2-horizon-32b",
+      "intelligence_index": 13.9,
       "coding_index": null,
       "agentic_index": null
     },
@@ -438,14 +534,32 @@
       "agentic_index": null
     },
     {
+      "slug": "gemini-4-neon-high",
+      "intelligence_index": 59.6,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
       "slug": "claude-fable-5-1-high",
       "intelligence_index": 47.2,
       "coding_index": null,
       "agentic_index": null
     },
     {
+      "slug": "k2-horizon-0-9b",
+      "intelligence_index": 2.7,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
       "slug": "nvidia-nemotron-3-nano-4b",
       "intelligence_index": 1.8,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "gpt-6-2-sol",
+      "intelligence_index": 57.3,
       "coding_index": null,
       "agentic_index": null
     },
@@ -464,6 +578,12 @@
     {
       "slug": "claude-4-5-haiku-reasoning",
       "intelligence_index": 7.4,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
+      "slug": "gpt-6-2-sol-low",
+      "intelligence_index": 40.6,
       "coding_index": null,
       "agentic_index": null
     },
@@ -528,6 +648,12 @@
       "agentic_index": null
     },
     {
+      "slug": "inkling-high",
+      "intelligence_index": 11,
+      "coding_index": null,
+      "agentic_index": null
+    },
+    {
       "slug": "k2-horizon-375b-a23b",
       "intelligence_index": 17.8,
       "coding_index": null,
@@ -570,26 +696,8 @@
       "agentic_index": null
     },
     {
-      "slug": "gpt-6-1-terra-low",
-      "intelligence_index": 29.4,
-      "coding_index": null,
-      "agentic_index": null
-    },
-    {
-      "slug": "glm-5-3-low",
-      "intelligence_index": 23.1,
-      "coding_index": null,
-      "agentic_index": null
-    },
-    {
-      "slug": "gemma-4-31b",
-      "intelligence_index": 4.4,
-      "coding_index": null,
-      "agentic_index": null
-    },
-    {
-      "slug": "glm-5-3",
-      "intelligence_index": 31.7,
+      "slug": "lfm3-1-7b",
+      "intelligence_index": 6,
       "coding_index": null,
       "agentic_index": null
     }
