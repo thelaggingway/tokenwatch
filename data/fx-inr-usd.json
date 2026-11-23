@@ -1,8 +1,8 @@
 {
   "base": "INR",
   "quote": "USD",
-  "rate": 0.010647,
-  "rate_date": "2026-11-16",
-  "fetched_at": "2026-11-16T15:51:00.000Z",
+  "rate": 0.010762,
+  "rate_date": "2026-11-23",
+  "fetched_at": "2026-11-23T16:46:50.248Z",
   "source": "ECB reference rate via frankfurter.dev"
 }
