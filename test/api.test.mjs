@@ -224,7 +224,7 @@ test('/api/v1/use-cases lists the shared recommendation presets and marks mixes 
   assert.ok(agentic.weights.benchmark.coding_index > 0);
   assert.ok(agentic.weights.provider.throughput > 0);
   assert.deepEqual(agentic.requirements, { needsToolCalling: true, needsStructuredOutput: false, minContext: 32768 });
-  assert.deepEqual(agentic.floors, { field: 'coding_index', min: 25 });
+  assert.deepEqual(agentic.floors, { field: 'intelligence_index', min: 15 });
 });
 
 function recommendationAssets(catalog, arenaSource = null) {
@@ -301,6 +301,7 @@ test('/api/v1/recommend uses shared shortlist groups with explanations, confiden
   assert.equal(body.priority, 'fastest');
   assert.deepEqual(body.mix, { inputPct: 2.5, cacheReadPct: 97, outputPct: 0.5, assumed: true });
   assert.ok(body.picks.bestQuality.explanation);
+  assert.ok(body.picks.cheapestAboveFloor, 'quality floor must use a benchmark the committed catalogs still report');
   assert.ok(body.picks.bestQuality.confidence);
   for (const group of [body.alsoConsidered, body.partiallyBenchmarked, body.unbenchmarked, body.unverified]) {
     assert.ok(Number.isInteger(group.totalCount));

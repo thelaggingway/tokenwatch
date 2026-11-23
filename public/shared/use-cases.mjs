@@ -37,8 +37,9 @@ export const USE_CASES = Object.freeze({
     providerWeights: { price: 0.25, ttft: 0.2, throughput: 0.35, uptime: 0.2 },
     hardRequirements: { needsToolCalling: true, needsStructuredOutput: false, minContext: 32768 },
     quantizationPolicy: { reject: LOW_BIT_QUANTS, fallbackWhenNoAlternative: true },
-    // Priced, provider-qualified open weights: 56 families, coding p25≈22.8 / median≈45.5.
-    qualityFloor: { field: 'coding_index', min: 25 },
+    // AA stopped publishing coding_index (Nov 2026), so the floor uses the
+    // intelligence index it still publishes: catalog p25≈18.9 / median≈31.
+    qualityFloor: { field: 'intelligence_index', min: 15 },
   },
   'tool-agents': {
     id: 'tool-agents',
@@ -52,8 +53,9 @@ export const USE_CASES = Object.freeze({
     providerWeights: { price: 0.25, ttft: 0.2, throughput: 0.35, uptime: 0.2 },
     hardRequirements: { needsToolCalling: true, needsStructuredOutput: false, minContext: 16384 },
     quantizationPolicy: { reject: LOW_BIT_QUANTS, fallbackWhenNoAlternative: true },
-    // Priced, provider-qualified open weights: 44 families, agentic p25≈1.2 / median≈17.2.
-    qualityFloor: { field: 'agentic_index', min: 10 },
+    // AA stopped publishing agentic_index (Nov 2026), so the floor uses the
+    // intelligence index it still publishes: catalog p25≈18.9 / median≈31.
+    qualityFloor: { field: 'intelligence_index', min: 15 },
   },
   'long-context-rag': {
     id: 'long-context-rag',

@@ -207,19 +207,34 @@ test('LiveBench-thin use cases use AA intelligence for the absolute floor', () =
       supported_parameters: ['structured_outputs'],
       benchmarks: { intelligence_index: 15.1 },
     }),
+    // A LiveBench-scored peer makes the aa-only model's missing LiveBench a real gap.
+    mixOffering('open/livebench-peer', 'structured-provider', 20, 5, {
+      supported_parameters: ['structured_outputs'],
+      benchmarks: { intelligence_index: 20, livebench_instruction_following: 60, livebench_data_analysis: 60 },
+    }),
   ]);
   assert.equal(result.cheapestAboveFloor.id, 'aa-only');
   assert.equal(result.cheapestAboveFloor.group, 'partiallyBenchmarked');
   assert.ok(result.cheapestAboveFloor.reasons.some((reason) => /intelligence_index.*absolute floor of 15/i.test(reason)));
 });
 
+test('a benchmark no candidate reports does not cap quality coverage', () => {
+  // AA stopped publishing coding_index and agentic_index; agentic-coding must still pick.
+  const result = shortlistModels('agentic-coding', [
+    mixOffering('open/strong', 'alpha', 60, 4, { benchmarks: { intelligence_index: 60, livebench_agentic_coding: 50 } }),
+    mixOffering('open/weak', 'beta', 30, 1, { benchmarks: { intelligence_index: 30, livebench_agentic_coding: 20 } }),
+  ]);
+  assert.equal(result.bestQuality?.id, 'strong');
+  assert.equal(result.partiallyBenchmarked.length, 0);
+});
+
 test('cheapest-above-floor explains when it costs more than bestValue', () => {
   const result = shortlistModels('agentic-coding', [
     mixOffering('open/cheap-below-floor', 'cheap', 100, 1, {
-      benchmarks: { agentic_index: 100, coding_index: 24, intelligence_index: 100, livebench_agentic_coding: 100 },
+      benchmarks: { agentic_index: 100, coding_index: 100, intelligence_index: 14, livebench_agentic_coding: 100 },
     }),
     mixOffering('open/expensive-above-floor', 'expensive', 0, 10, {
-      benchmarks: { agentic_index: 0, coding_index: 30, intelligence_index: 0, livebench_agentic_coding: 0 },
+      benchmarks: { agentic_index: 0, coding_index: 0, intelligence_index: 30, livebench_agentic_coding: 0 },
     }),
   ]);
   assert.equal(result.bestValue.id, 'cheap-below-floor');
@@ -239,15 +254,15 @@ test('shortlist selects a quality/price Pareto knee without ranking by score-to-
 test('cheapest-above-floor uses the use-case absolute primary-benchmark threshold', () => {
   const result = shortlistModels('agentic-coding', [
     mixOffering('open/below-floor', 'cheap', 90, 0.01, {
-      benchmarks: { intelligence_index: 90, coding_index: 24.9 },
+      benchmarks: { intelligence_index: 14.9, coding_index: 90 },
     }),
     mixOffering('open/at-floor', 'qualified', 25, 2, {
-      benchmarks: { intelligence_index: 25, coding_index: 25 },
+      benchmarks: { intelligence_index: 15, coding_index: 25 },
     }),
   ]);
-  assert.deepEqual(result.qualityFloor, { field: 'coding_index', min: 25 });
+  assert.deepEqual(result.qualityFloor, { field: 'intelligence_index', min: 15 });
   assert.equal(result.cheapestAboveFloor.id, 'at-floor');
-  assert.ok(result.cheapestAboveFloor.reasons.some((reason) => /coding_index.*absolute floor of 25/i.test(reason)));
+  assert.ok(result.cheapestAboveFloor.reasons.some((reason) => /intelligence_index.*absolute floor of 15/i.test(reason)));
 });
 
 test('unbenchmarked models are returned explicitly and never enter ranked picks', () => {
