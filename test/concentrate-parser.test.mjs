@@ -549,3 +549,35 @@ test('the pipeline wires Concentrate last and never needs an API key', async () 
   // The fetch happens after the Refuseless block, so every other tier wins.
   assert.ok(pricing.indexOf('Concentrate (aggregator catalog, last tier)') > pricing.indexOf("console.error(`✗ Refuseless: ${err.message}`)"));
 });
+
+test('regional rows are reported, never priced, and cannot duplicate context tiers', () => {
+  const { offerings, skipped } = parseOne(modelOf('regional', {
+    host: hostOf([
+      simple(12, 60, { region: 'eu' }),
+      simple(11, 55, { region: 'us' }),
+      simple(10, 50),
+      simple(22, 110, { service_tier: 'priority', region: 'eu' }),
+      simple(20, 100, { service_tier: 'priority' }),
+      simple(44, 165, { input_gte: 272000, service_tier: 'priority', region: 'eu' }),
+      simple(44, 165, { input_gte: 272000, service_tier: 'priority', region: 'us' }),
+      simple(40, 150, { input_gte: 272000, service_tier: 'priority' }),
+      simple(20, 75, { input_gte: 272000, region: 'us' }),
+      simple(20, 75, { input_gte: 272000 }),
+    ]),
+  }));
+  const base = find(offerings, 'host');
+  assert.equal(base.pricing.input, 10);
+  assert.deepEqual(base.context_price_tiers.map((t) => [t.above_tokens, t.input]), [[271999, 20]]);
+  const priority = find(offerings, 'host', 'priority');
+  assert.equal(priority.pricing.input, 20);
+  assert.deepEqual(priority.context_price_tiers.map((t) => [t.above_tokens, t.input]), [[271999, 40]]);
+  assert.deepEqual(skipped.filter((s) => s.reason === 'regional-price').map((s) => s.detail), ['eu, us']);
+});
+
+test('equal long-context thresholds keep the first row so tiers strictly ascend', () => {
+  const { offerings, skipped } = parseOne(modelOf('dupes', {
+    host: hostOf([simple(1, 2), simple(3, 6, { input_gte: 100000 }), simple(4, 8, { input_gte: 100000 })]),
+  }));
+  assert.deepEqual(find(offerings, 'host').context_price_tiers.map((t) => t.input), [3]);
+  assert.ok(skipped.some((s) => s.reason === 'duplicate-context-tier'));
+});

@@ -132308,20 +132308,6 @@
       "context_price_tiers": [
         {
           "above_tokens": 271999,
-          "input": 44,
-          "output": 165,
-          "cache_read": 4.4,
-          "cache_write": 55
-        },
-        {
-          "above_tokens": 271999,
-          "input": 44,
-          "output": 165,
-          "cache_read": 4.4,
-          "cache_write": 55
-        },
-        {
-          "above_tokens": 271999,
           "input": 40,
           "output": 150,
           "cache_read": 4,
@@ -132414,20 +132400,6 @@
         "cache_write": 5.5
       },
       "context_price_tiers": [
-        {
-          "above_tokens": 271999,
-          "input": 8.8,
-          "output": 33,
-          "cache_read": 0.88,
-          "cache_write": 11
-        },
-        {
-          "above_tokens": 271999,
-          "input": 8.8,
-          "output": 33,
-          "cache_read": 0.88,
-          "cache_write": 11
-        },
         {
           "above_tokens": 271999,
           "input": 8,
@@ -132523,20 +132495,6 @@
         "cache_write": 5.5
       },
       "context_price_tiers": [
-        {
-          "above_tokens": 271999,
-          "input": 8.8,
-          "output": 33,
-          "cache_read": 0.44,
-          "cache_write": 11
-        },
-        {
-          "above_tokens": 271999,
-          "input": 8.8,
-          "output": 33,
-          "cache_read": 0.44,
-          "cache_write": 11
-        },
         {
           "above_tokens": 271999,
           "input": 8,
@@ -132638,13 +132596,6 @@
       "context_price_tiers": [
         {
           "above_tokens": 271999,
-          "input": 2.2,
-          "output": 8.25,
-          "cache_read": 0.11,
-          "cache_write": 2.75
-        },
-        {
-          "above_tokens": 271999,
           "input": 2,
           "output": 7.5,
           "cache_read": 0.1,
@@ -132695,20 +132646,6 @@
         "cache_write": 2.75
       },
       "context_price_tiers": [
-        {
-          "above_tokens": 271999,
-          "input": 4.4,
-          "output": 16.5,
-          "cache_read": 0.22,
-          "cache_write": 5.5
-        },
-        {
-          "above_tokens": 271999,
-          "input": 4.4,
-          "output": 16.5,
-          "cache_read": 0.22,
-          "cache_write": 5.5
-        },
         {
           "above_tokens": 271999,
           "input": 4,
@@ -132806,20 +132743,6 @@
       "context_price_tiers": [
         {
           "above_tokens": 271999,
-          "input": 0.44,
-          "output": 1.65,
-          "cache_read": 0.044,
-          "cache_write": 0.55
-        },
-        {
-          "above_tokens": 271999,
-          "input": 0.44,
-          "output": 1.65,
-          "cache_read": 0.044,
-          "cache_write": 0.55
-        },
-        {
-          "above_tokens": 271999,
           "input": 0.4,
           "output": 1.5,
           "cache_read": 0.04,
@@ -132915,20 +132838,6 @@
       "context_price_tiers": [
         {
           "above_tokens": 271999,
-          "input": 17.6,
-          "output": 66,
-          "cache_read": 1.76,
-          "cache_write": 22
-        },
-        {
-          "above_tokens": 271999,
-          "input": 17.6,
-          "output": 66,
-          "cache_read": 1.76,
-          "cache_write": 22
-        },
-        {
-          "above_tokens": 271999,
           "input": 16,
           "output": 60,
           "cache_read": 1.6,
@@ -133020,20 +132929,6 @@
       "context_price_tiers": [
         {
           "above_tokens": 271999,
-          "input": 17.6,
-          "output": 66,
-          "cache_read": 1.76,
-          "cache_write": 22
-        },
-        {
-          "above_tokens": 271999,
-          "input": 17.6,
-          "output": 66,
-          "cache_read": 1.76,
-          "cache_write": 22
-        },
-        {
-          "above_tokens": 271999,
           "input": 16,
           "output": 60,
           "cache_read": 1.6,
@@ -133123,20 +133018,6 @@
         "cache_write": 5.5
       },
       "context_price_tiers": [
-        {
-          "above_tokens": 271999,
-          "input": 8.8,
-          "output": 39.6,
-          "cache_read": 0.88,
-          "cache_write": 11
-        },
-        {
-          "above_tokens": 271999,
-          "input": 8.8,
-          "output": 39.6,
-          "cache_read": 0.88,
-          "cache_write": 11
-        },
         {
           "above_tokens": 271999,
           "input": 8,
@@ -133234,13 +133115,6 @@
       "context_price_tiers": [
         {
           "above_tokens": 271999,
-          "input": 4.4,
-          "output": 19.8,
-          "cache_read": 0.44,
-          "cache_write": 5.5
-        },
-        {
-          "above_tokens": 271999,
           "input": 4,
           "output": 18,
           "cache_read": 0.4,
@@ -133291,20 +133165,6 @@
         "cache_write": 5.5
       },
       "context_price_tiers": [
-        {
-          "above_tokens": 271999,
-          "input": 8.8,
-          "output": 39.6,
-          "cache_read": 0.88,
-          "cache_write": 11
-        },
-        {
-          "above_tokens": 271999,
-          "input": 8.8,
-          "output": 39.6,
-          "cache_read": 0.88,
-          "cache_write": 11
-        },
         {
           "above_tokens": 271999,
           "input": 8,
@@ -133400,20 +133260,6 @@
         "cache_write": 0.55
       },
       "context_price_tiers": [
-        {
-          "above_tokens": 271999,
-          "input": 0.88,
-          "output": 3.96,
-          "cache_read": 0.088,
-          "cache_write": 1.1
-        },
-        {
-          "above_tokens": 271999,
-          "input": 0.88,
-          "output": 3.96,
-          "cache_read": 0.088,
-          "cache_write": 1.1
-        },
         {
           "above_tokens": 271999,
           "input": 0.8,
@@ -133691,20 +133537,6 @@
         "cache_write": null
       },
       "context_price_tiers": [
-        {
-          "above_tokens": 271999,
-          "input": 33,
-          "output": 148.5,
-          "cache_read": null,
-          "cache_write": null
-        },
-        {
-          "above_tokens": 271999,
-          "input": 33,
-          "output": 148.5,
-          "cache_read": null,
-          "cache_write": null
-        },
         {
           "above_tokens": 271999,
           "input": 30,
@@ -137528,13 +137360,6 @@
         "cache_write": null
       },
       "context_price_tiers": [
-        {
-          "above_tokens": 199999,
-          "input": 4.4,
-          "output": 13.2,
-          "cache_read": 1.1,
-          "cache_write": null
-        },
         {
           "above_tokens": 199999,
           "input": 4,
