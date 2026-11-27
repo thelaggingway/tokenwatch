@@ -2495,7 +2495,8 @@ function concentrateBaseEntry(host) {
   const entries = Array.isArray(host?.pricing) ? host.pricing : [];
   return entries.find((entry) => {
     const c = entry?.condition || {};
-    return c.service_tier == null && c.input_gte == null && c.date_gte == null && c.schedule == null;
+    return c.service_tier == null && c.input_gte == null && c.date_gte == null && c.schedule == null
+      && c.region == null;
   }) || null;
 }
 
@@ -2600,9 +2601,17 @@ export function parseConcentrate(data) {
       const base = makeOffering(baseEntry, null);
       const priced = [{ offering: base, entry: baseEntry }];
       const tiers = new Map();
+      // Concentrate lists EU/US data-residency surcharges (~10%) beside each
+      // global row; TokenWatch prices the global rate, so regional rows are
+      // reported once per host and never priced or bucketed as context tiers.
+      const regions = [...new Set(entries.map((e) => e?.condition?.region).filter((r) => r != null))];
+      if (regions.length) {
+        skipped.push({ slug, provider, reason: 'regional-price', detail: regions.map(String).sort().join(', ') });
+      }
       for (const entry of entries) {
         if (entry === baseEntry) continue;
         const condition = entry?.condition || {};
+        if (condition.region != null) continue;
         if (condition.date_gte != null || condition.schedule != null) {
           skipped.push({
             slug,
@@ -2633,6 +2642,7 @@ export function parseConcentrate(data) {
       for (const entry of entries) {
         const condition = entry?.condition || {};
         if (condition.input_gte == null) continue;
+        if (condition.region != null) continue;
         if (condition.date_gte != null || condition.schedule != null) continue;
         const variant = condition.service_tier ? String(condition.service_tier).toLowerCase() : null;
         const targetRows = variant === null ? tierRows.get(null) : tierRows.get(variant);
@@ -2642,7 +2652,13 @@ export function parseConcentrate(data) {
         }
         const prices = concentrateTokenPrices(entry.tokens);
         if (prices.input === null && prices.output === null) continue;
-        targetRows.push({ above_tokens: Math.max(0, Math.round(num(condition.input_gte)) - 1), ...prices });
+        const aboveTokens = Math.max(0, Math.round(num(condition.input_gte)) - 1);
+        // Tiers must strictly ascend (the published data contract); keep the first.
+        if (targetRows.some((row) => row.above_tokens === aboveTokens)) {
+          skipped.push({ slug, provider, reason: 'duplicate-context-tier', detail: `${condition.service_tier ?? 'base'} @ ${aboveTokens + 1}` });
+          continue;
+        }
+        targetRows.push({ above_tokens: aboveTokens, ...prices });
       }
 
       for (const { offering, entry } of priced) {

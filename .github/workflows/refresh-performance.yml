@@ -46,18 +46,21 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Run tests
-        env:
-          TW_PARITY_LIVE: '0'
-          # Upstream open-weights conflicts are reported to an issue, not blocking (PR CI stays strict).
-          TW_OPEN_WEIGHTS_COVERAGE: '0'
-        run: node --test test/*.test.mjs
-
       - name: Fetch performance data
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CORAL_API_KEY: ${{ secrets.CORAL_API_KEY }}
         run: node scripts/fetch-performance.mjs
+
+      # Validate the data about to be published, not the previous commit's: a bad
+      # upstream batch then fails this run only, is never committed, and cannot
+      # block the next run's fetch (the 2026-11-19 and 2026-11-26 outages).
+      - name: Validate refreshed data
+        env:
+          TW_PARITY_LIVE: '0'
+          # Upstream open-weights conflicts are reported to an issue, not blocking (PR CI stays strict).
+          TW_OPEN_WEIGHTS_COVERAGE: '0'
+        run: node --test test/*.test.mjs
 
       - name: Commit performance data
         run: |
@@ -118,3 +121,30 @@ jobs:
 
       # Deploy is explicit (not relying on push-triggered refresh-pricing.yml deploy)
       # because GITHUB_TOKEN pushes do not trigger downstream workflow runs.
+
+  # One issue per outage: opened by the first failed refresh, closed by the next good one.
+  alert:
+    needs: perf
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (needs.perf.result == 'success' || needs.perf.result == 'failure')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/report-refresh-failure.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Sync refresh-failure issue
+        uses: actions/github-script@v7
+        env:
+          RESULT: ${{ needs.perf.result }}
+        with:
+          script: |
+            const { failedStep, syncRefreshFailureIssue } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/report-refresh-failure.mjs`);
+            const result = process.env.RESULT;
+            const step = result === 'failure' ? await failedStep({ github, context, job: 'perf' }) : null;
+            core.info(await syncRefreshFailureIssue({ github, context, result, step }));
