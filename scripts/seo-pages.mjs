@@ -1419,7 +1419,7 @@ export function buildOpenApiDocument() {
     info: {
       title: 'TokenWatch Pricing API',
       version: 'v1',
-      description: 'Read-only, public JSON API for TokenWatch text, image, video, provider, organization, pricing catalog data, and workload-aware recommendations. Prices are USD per million tokens unless a response says otherwise, and every unknown value is null rather than zero.',
+      description: 'Read-only, public JSON API for TokenWatch text, image, video, provider, organization, pricing catalog data, and workload-aware recommendations. Prices are USD per million tokens unless a response says otherwise, and every unknown value is null rather than zero. Responses are compact JSON (`pretty=1` to indent) and carry a strong `ETag`: send `If-None-Match` to get a bodyless 304. Successful GETs are cacheable for 300 seconds with a 600-second stale-while-revalidate window; errors are `no-store`. `HEAD` returns the same status and headers as `GET` without a body.',
     },
     servers: [{ url: SITE }],
     paths,

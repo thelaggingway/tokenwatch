@@ -224,3 +224,24 @@ test('the committed openapi.json matches what the generator produces', () => {
   assert.deepEqual(committed, doc,
     'public/openapi.json is stale — run `npm run seo` and commit the result');
 });
+
+// The handler applies `pretty` centrally in withETag, so it is honoured by
+// every data route. Documenting it on only some routes understates the API
+// (and once did: it was published for /recommend alone while working
+// everywhere), so pin the full set here.
+test('pretty is documented on every data route', () => {
+  const missing = [];
+  for (const path of Object.keys(doc.paths)) {
+    const names = doc.paths[path].get.parameters.map((parameter) => parameter.name);
+    if (!names.includes('pretty')) missing.push(path);
+  }
+  assert.deepEqual(missing, [], 'these routes honour pretty but do not document it');
+
+  // And it must not be advertised on a route the router rejects it on: every
+  // documented pretty parameter belongs to a registered endpoint.
+  for (const path of Object.keys(doc.paths)) {
+    const parameter = doc.paths[path].get.parameters.find((p) => p.name === 'pretty');
+    assert.equal(parameter.in, 'query');
+    assert.ok(parameter.description.length > 20, `${path}?pretty needs a real description`);
+  }
+});

@@ -3,7 +3,7 @@
   "info": {
     "title": "TokenWatch Pricing API",
     "version": "v1",
-    "description": "Read-only, public JSON API for TokenWatch text, image, video, provider, organization, pricing catalog data, and workload-aware recommendations. Prices are USD per million tokens unless a response says otherwise, and every unknown value is null rather than zero."
+    "description": "Read-only, public JSON API for TokenWatch text, image, video, provider, organization, pricing catalog data, and workload-aware recommendations. Prices are USD per million tokens unless a response says otherwise, and every unknown value is null rather than zero. Responses are compact JSON (`pretty=1` to indent) and carry a strong `ETag`: send `If-None-Match` to get a bodyless 304. Successful GETs are cacheable for 300 seconds with a 600-second stale-while-revalidate window; errors are `no-store`. `HEAD` returns the same status and headers as `GET` without a body."
   },
   "servers": [
     {
@@ -15,7 +15,24 @@
       "get": {
         "summary": "API metadata and endpoint directory",
         "operationId": "getApiV1",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Catalog counts and the rendered endpoint directory.",
@@ -65,7 +82,24 @@
         "summary": "List workload recommendation presets and their assumed mixes, weights, requirements, and quality floors",
         "description": "Returns the nine use-case presets used by /choose/ and the recommend endpoints. Every mix is flagged assumed: true; weights and floors are documented judgments, not measurements.",
         "operationId": "getApiV1UseCases",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "The nine workload presets with their assumed mixes, benchmark and provider weights, hard requirements, quantization policy and quality floors.",
@@ -629,6 +663,22 @@
               "minimum": 0,
               "default": 0
             }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
+            }
           }
         ],
         "responses": {
@@ -706,6 +756,22 @@
             "description": "Comma-separated input, cached-input, output percentages used to blend each offering's rates. Must sum to 100, validated like `/history`. When present, offerings sort by the blended rate at this mix with unpriceable offerings last; `tokens` is not required. Without it, offerings sort by `input + output`, unpriced offerings last.",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
             }
           }
         ],
@@ -787,6 +853,22 @@
             "schema": {
               "type": "string",
               "pattern": "^\\d+(\\.\\d+)?(,\\d+(\\.\\d+)?){2}$"
+            }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
             }
           }
         ],
@@ -888,6 +970,22 @@
                 "frontend-ui"
               ]
             }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
+            }
           }
         ],
         "responses": {
@@ -988,6 +1086,22 @@
                 "frontend-ui"
               ]
             }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
+            }
           }
         ],
         "responses": {
@@ -1038,7 +1152,24 @@
       "get": {
         "summary": "Return catalog, provider, organization, privacy, cache, and quantization counts",
         "operationId": "getApiV1Stats",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Catalog, provider, organization, privacy, cache and quantization counts. Each bucket map sums to `model_count`.",
@@ -1087,7 +1218,24 @@
       "get": {
         "summary": "List model organizations with offering counts",
         "operationId": "getApiV1Orgs",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Organizations with offering counts, sorted by count descending.",
@@ -1144,6 +1292,22 @@
             "description": "When `true`, keep only providers whose metadata says `retains_prompts: false`.",
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
             }
           }
         ],
@@ -1274,6 +1438,22 @@
               "minimum": 0,
               "default": 0
             }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
+            }
           }
         ],
         "responses": {
@@ -1332,6 +1512,22 @@
             "description": "Model id. Slashes (`org/model`) and `%2F` percent-encoding are accepted; matching is on the normalized id.",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
             }
           }
         ],
@@ -1462,6 +1658,22 @@
               "minimum": 0,
               "default": 0
             }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
+            }
           }
         ],
         "responses": {
@@ -1520,6 +1732,22 @@
             "description": "Model id. Slashes (`org/model`) and `%2F` percent-encoding are accepted; matching is on the normalized id.",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "pretty",
+            "in": "query",
+            "required": false,
+            "description": "When `1` or `true`, indent the JSON. Every data route returns compact JSON by default and honours this flag; indenting inflates the payload, so it is meant for reading, not for clients.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0",
+                "true",
+                "false"
+              ],
+              "default": "0"
             }
           }
         ],
